@@ -1,0 +1,6 @@
+default:
+  host: "weca-pg-gis-dev.postgres.database.azure.com"
+  database: "weca_gis"
+  port: 5432
+  user: "weca_reader"
+  pass: "KtgysvHNDS596XZ7"
