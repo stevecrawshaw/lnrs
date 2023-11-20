@@ -4,7 +4,7 @@ pacman::p_load(tidyverse,
                rvest)
 
 # construct tables of grants and links to be joined to recommendations
-
+# Countryside Stewardship Grant Links Table ----
 make_url_vec <- function(base_url = "https://www.gov.uk/countryside-stewardship-grants", num_pages = 6){
 
 pages_url <- paste0(rep(base_url, num_pages -1), "?page=", 2:num_pages)
@@ -23,10 +23,13 @@ get_links <- function(url){
     url = html_attr(link_nodes, "href"))
 }
 
-links_raw_tbl <- make_url_vec() %>% 
-  map(get_links) %>% 
-  bind_rows()
+make_links_raw_tbl <- function(make_url_vec, get_links){
+  make_url_vec() %>% 
+    map(get_links) %>% 
+    bind_rows()
+}
 
+links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
 
 make_links_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
 # clean and wrangle the links to get just the guidance links
@@ -46,8 +49,8 @@ make_links_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
 cs_links_tbl <- make_links_tbl(links_raw_tbl = links_raw_tbl,
                             domain = "https://www.gov.uk")
 
+# Sustainable Farming Initiative Grants Links Table ----
 
-# sustainable farming initiative
 # from Table 1 here https://assets.publishing.service.gov.uk/media/6516c0986a423b0014f4c62e/SFI23_handbook.pdf
 # via chatGPT to parse into table 
 # https://chat.openai.com/share/65eac56b-a023-4129-9ea2-add1d6d24f88
@@ -72,7 +75,7 @@ clean_sfi_tbl <- function(sfi_raw_tbl, url = "https://assets.publishing.service.
 
 sfi_tbl <- clean_sfi_tbl(sfi_raw_tbl = sfi_raw_tbl)
 
+# Consolidate into One Table ----
+
 all_grants_tbl <- bind_rows(cs_links_tbl, sfi_tbl)
-
-
 

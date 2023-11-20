@@ -2,22 +2,13 @@ pacman::p_load(tidyverse,
                glue,
                janitor,
                fs,
-               readxl)
+               readxl,
+               writexl)
+# Source Data ----
 path = "data/Local Priorities Master for portal_updated format.xlsx"
 sheets_vec <-
   readxl::excel_sheets(path)
-
-make_list_from_sheets <- function(
-    path = "data/Local Priorities Master for portal_updated format.xlsx",
-    sheets_vec) {
-  sheets_vec %>%
-    map(~ read_xlsx(path, .x)) %>%
-    set_names(make_clean_names(sheets_vec)) %>%
-    map(.f = clean_names)
-}
-
-sheets_list <- make_list_from_sheets(path, sheets_vec)
-
+# Utility Functions ----
 clean_text <- function(input_string) {
   # Step 1: Replace non-space-padded hyphens with a placeholder
   # Use a unique placeholder that is unlikely to be in the text
@@ -31,6 +22,16 @@ clean_text <- function(input_string) {
   return(output_string)
 }
 
+make_list_from_sheets <- function(
+    path = "data/Local Priorities Master for portal_updated format.xlsx",
+    sheets_vec) {
+  # read all the sheets and store in a list with each element a sheet
+  sheets_vec %>%
+    map(~ read_xlsx(path, .x)) %>%
+    set_names(make_clean_names(sheets_vec)) %>%
+    map(.f = clean_names)
+}
+# Process source data from spreadsheet ----
 parse_areas_tbl <- function(sheets_list) {
   # import and process the priority areas
   sheets_list %>%
@@ -71,8 +72,10 @@ parse_priorities_tbl <- function(sheets_list, areas_count = 47) {
     mutate(across(.cols = ends_with("_id"), as.integer))
 }
 
+# mba <- sheets_list %>% pluck("measures_by_area")
+# mba %>% glimpse()
 
-# parse_measures_tbl <- function(sheets_list){
+parse_measures_tbl <- function(sheets_list){
  # consolidate measures by priority and measures by area sheets
   # extend, separating out codes
 measures_priority_tbl <- sheets_list %>% pluck("measures_by_priority") 
@@ -99,26 +102,67 @@ measures_tbl %>%
   select(-name,
          -starts_with("recommended")) %>%
   # line below fails if done above!
-  separate_longer_delim(associated_area_codes, delim = "; ") %>% 
+  separate_longer_delim(associated_area_codes,
+                        delim = "; ") %>% 
   select(measure_id, measure, ambition = level_of_ambition, land_type,
          stakeholder_type = stakeholder, area_id = associated_area_codes,
-         priority_id, guidance = link_to_further_guidance, everything()) %>%
-  view()
-# }
+         priority_id, guidance = link_to_further_guidance, everything()) %>% 
+  mutate(across(.cols = ends_with("_id"), as.integer))
+}
+
+save_tbls <- function(tbl_list){
+  # take a named list and write csv's for the portal 
+  # and an excel file for introspection
+  # csv - semicolon delims
+  nms = paste0("data/", names(tbl_list), ".csv")
+  walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
+  # excel for viewing
+  write_xlsx(tbl_list, path = "data/main_sheets.xlsx")
+  
+}
+
+species_tbl <- sheets_list %>% 
+  pluck("priority_species") %>% 
+  mutate(linnaean_name = str_extract(linnaean,
+                                     "\\*([A-Z][a-z]+\\s[a-z]+)\\*") %>% 
+           str_replace_all("\\*", ""),
+         linnaean = NULL) %>% 
+  separate_longer_delim(cols = relevant_areas,
+                        delim = "; ") %>%
+  separate_longer_delim(cols = relevant_priorities,
+                        delim = "; ") %>%
+  rename(area_id = relevant_areas,
+         priority_id = relevant_priorities) %>%
+  mutate(across(ends_with("_id"), as.integer)) %>%
+  select(scientificName = linnaean_name) %>% 
+  write_csv("data/gbif.csv")
 
 
 
 
+# Test functions and generate data ----
 
-priorities_tbl <- priorities_base_tbl %>%
-  distinct(priority_id, priority_description)
+sheets_list <- make_list_from_sheets(path, sheets_vec)
+areas_tbl <- parse_areas_tbl(sheets_list)
+priorities_tbl <- parse_priorities_tbl(sheets_list) %>% 
+  distinct(theme, priority_id, biodiversity_priority)
+measures_tbl <- parse_measures_tbl(sheets_list) %>% 
+  distinct(measure_id, measure, ambition, land_type)
+priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list) %>% 
+  distinct(area_id, priority_id)
+measures_priority_area_lookup_tbl <- parse_measures_tbl(sheets_list) %>% 
+  distinct(measure_id, area_id, priority_id)
 
-# lookup between priorities and areas
-priority_area_tbl <- priorities_base_tbl %>%
-  select(-priority_description)
+# Write Data ----
 
-rec_area_tbl <- recommendations_area_raw_tbl %>%
-  clean_names() %>%
-  separate_rows(associated_area_codes, sep = "; ") %>%
-  mutate(associated_area_codes = as.integer(associated_area_codes)) %>%
-  glimpse()
+tbl_list <- list(
+  areas = areas_tbl, 
+  priorities = priorities_tbl, 
+  measures = measures_tbl,
+  priority_area_lookup = priority_area_lookup_tbl,
+  measures_priority_area_lookup = measures_priority_area_lookup_tbl
+                 )
+
+save_tbls(tbl_list)
+
+
