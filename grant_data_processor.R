@@ -29,8 +29,6 @@ make_links_raw_tbl <- function(make_url_vec, get_links){
     bind_rows()
 }
 
-links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
-
 make_links_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
 # clean and wrangle the links to get just the guidance links
   links_raw_tbl %>% 
@@ -46,6 +44,7 @@ make_links_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
          annual_payment = "") # flipping missing colon BC3 BC4
 }
 
+links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
 cs_links_tbl <- make_links_tbl(links_raw_tbl = links_raw_tbl,
                             domain = "https://www.gov.uk")
 

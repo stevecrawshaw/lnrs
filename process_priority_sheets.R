@@ -3,7 +3,8 @@ pacman::p_load(tidyverse,
                janitor,
                fs,
                readxl,
-               writexl)
+               writexl,
+               rgbif)
 # Source Data ----
 path = "data/Local Priorities Master for portal_updated format.xlsx"
 sheets_vec <-
@@ -46,7 +47,7 @@ parse_areas_tbl <- function(sheets_list) {
     )
 }
 
-parse_priorities_tbl <- function(sheets_list, areas_count = 47) {
+parse_priorities_tbl <- function(sheets_list, areas_count = 50) {
   # read and process the priorities table. 
   # amend area_count var if new areas are added
   
@@ -72,12 +73,12 @@ parse_priorities_tbl <- function(sheets_list, areas_count = 47) {
     mutate(across(.cols = ends_with("_id"), as.integer))
 }
 
-# mba <- sheets_list %>% pluck("measures_by_area")
-# mba %>% glimpse()
-
 parse_measures_tbl <- function(sheets_list){
  # consolidate measures by priority and measures by area sheets
   # extend, separating out codes
+  
+  # need to sort out the grants - pivoting longer etc.
+  
 measures_priority_tbl <- sheets_list %>% pluck("measures_by_priority") 
 measures_area_tbl <- sheets_list %>% pluck("measures_by_area") 
 
@@ -121,12 +122,30 @@ save_tbls <- function(tbl_list){
   
 }
 
-species_tbl <- sheets_list %>% 
+# Use chat GPT to get the Linnaean names https://chat.openai.com/share/086bf029-f2a7-409a-b60c-a5964015df21
+
+make_priority_species_tbl <- function(sheets_list){
+sheets_list %>% 
   pluck("priority_species") %>% 
+  rownames_to_column(var = "species_id") %>% 
   mutate(linnaean_name = str_extract(linnaean,
-                                     "\\*([A-Z][a-z]+\\s[a-z]+)\\*") %>% 
+                                     "\\*([A-Z][a-z]+\\s[a-z]+)") %>% 
            str_replace_all("\\*", ""),
-         linnaean = NULL) %>% 
+         linnaean = NULL,
+         species_id = as.integer(species_id))
+}
+
+get_gbif_tbl <- function(priority_species_tbl){
+# get the gbif definitive species data
+priority_species_tbl %>% 
+  pull(linnaean_name) %>% 
+  name_backbone_checklist() %>% 
+  select(-rank, -confidence, -matchType, acceptedUsageKey) %>% 
+  mutate(gbif_species_url = glue("https://www.gbif.org/species/{usageKey}"))
+}
+
+make_species_area_priority_lookup_tbl <- function(priority_species_tbl){
+priority_species_tbl %>% 
   separate_longer_delim(cols = relevant_areas,
                         delim = "; ") %>%
   separate_longer_delim(cols = relevant_priorities,
@@ -134,18 +153,30 @@ species_tbl <- sheets_list %>%
   rename(area_id = relevant_areas,
          priority_id = relevant_priorities) %>%
   mutate(across(ends_with("_id"), as.integer)) %>%
-  select(scientificName = linnaean_name) %>% 
-  write_csv("data/gbif.csv")
+  distinct(species_id, area_id, priority_id) 
+}
 
-
+make_species_tbl <- function(priority_species_tbl, gbif_tbl){
+priority_species_tbl %>% 
+  select(-species, -relevant_priorities, -relevant_areas, -link_to_further_guidance, -linnaean_name) %>% 
+  inner_join(gbif_tbl, by = join_by(species_id == verbatim_index))
+}
 
 
 # Test functions and generate data ----
 
 sheets_list <- make_list_from_sheets(path, sheets_vec)
+priority_species_tbl <- make_priority_species_tbl(sheets_list)
+gbif_tbl <- get_gbif_tbl(priority_species_tbl)
+species_tbl <- priority_species_tbl %>% 
+  make_species_tbl(gbif_tbl)
+species_area_priority_lookup_tbl <- priority_species_tbl %>% 
+  make_species_area_priority_lookup_tbl()
 areas_tbl <- parse_areas_tbl(sheets_list)
-priorities_tbl <- parse_priorities_tbl(sheets_list) %>% 
+
+priorities_tbl <- parse_priorities_tbl(sheets_list, areas_count = 50) %>% 
   distinct(theme, priority_id, biodiversity_priority)
+
 measures_tbl <- parse_measures_tbl(sheets_list) %>% 
   distinct(measure_id, measure, ambition, land_type)
 priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list) %>% 
@@ -159,8 +190,10 @@ tbl_list <- list(
   areas = areas_tbl, 
   priorities = priorities_tbl, 
   measures = measures_tbl,
+  species = species_tbl,
   priority_area_lookup = priority_area_lookup_tbl,
-  measures_priority_area_lookup = measures_priority_area_lookup_tbl
+  measures_priority_area_lookup = measures_priority_area_lookup_tbl,
+  species_area_priority_lookup = species_area_priority_lookup_tbl
                  )
 
 save_tbls(tbl_list)
