@@ -92,19 +92,35 @@ measures_tbl %>%
   mutate(across(.cols = c(level_of_ambition, land_type),
                 .fn = ~if_else(.x == "N/A",
                                NA_character_,
-                               .x))) %>% 
+                               .x)),
+         # remove text descriptions and add a PH1 placeholder
+         # designation pending assignation of correct codes
+         countryside_stewardship = if_else(!str_starts(countryside_stewardship,
+                                 "\\b[A-Z]{2}\\d{1,2}\\b"),
+                      "PH1", countryside_stewardship) %>%
+           str_extract_all("\\b[A-Z]{2}\\d{1,2};?\\b") %>% 
+           map_chr( ~paste0(.x, collapse = "; ")),
+         #paste0(..., collapse) coerces NA to "NA"!
+         countryside_stewardship = if_else(countryside_stewardship == "NA",
+                                           NA_character_,
+                                           countryside_stewardship)) %>% 
   separate_longer_delim(cols = c(stakeholder,
                                  countryside_stewardship,
                                  sfi),
                         delim = "; ") %>% 
   pivot_longer(starts_with("associated_priority"),
-               values_to = "priority_id") %>% #glimpse()
+               values_to = "priority_id") %>% 
   filter(!is.na(priority_id)) %>% 
   select(-name,
          -starts_with("recommended")) %>%
   # line below fails if done above!
+  
   separate_longer_delim(associated_area_codes,
                         delim = "; ") %>% 
+  pivot_longer(cols = c(countryside_stewardship, sfi, woodland, other),
+                 names_to = "grant_scheme",
+                 values_to = "link_or_code") %>% 
+  filter(!is.na(link_or_code)) %>% 
   select(measure_id, measure, ambition = level_of_ambition, land_type,
          stakeholder_type = stakeholder, area_id = associated_area_codes,
          priority_id, guidance = link_to_further_guidance, everything()) %>% 
