@@ -4,11 +4,17 @@ pacman::p_load(tidyverse,
                fs,
                readxl,
                writexl,
-               rgbif)
+               rgbif,
+               httr2,
+               rvest)
+
 # Source Data ----
-path = "data/Local Priorities Master for portal_updated format.xlsx"
+path = "data/Priorities and Measures Master for portal_working version.xlsx"
 sheets_vec <-
   readxl::excel_sheets(path)
+
+sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
+
 # Utility Functions ----
 clean_text <- function(input_string) {
   # Step 1: Replace non-space-padded hyphens with a placeholder
@@ -24,7 +30,7 @@ clean_text <- function(input_string) {
 }
 
 make_list_from_sheets <- function(
-    path = "data/Local Priorities Master for portal_updated format.xlsx",
+    path = "data/Priorities and Measures Master for portal_working version.xlsx",
     sheets_vec) {
   # read all the sheets and store in a list with each element a sheet
   sheets_vec %>%
@@ -32,6 +38,7 @@ make_list_from_sheets <- function(
     set_names(make_clean_names(sheets_vec)) %>%
     map(.f = clean_names)
 }
+
 # Process source data from spreadsheet ----
 parse_areas_tbl <- function(sheets_list) {
   # import and process the priority areas
@@ -39,15 +46,16 @@ parse_areas_tbl <- function(sheets_list) {
     pluck("areas_for_description") %>%
     rename(area_id = identifier,
            area_name = title,
+           area_description = brief_narrative,
            area_link = `links_to_further_info_guidance`) %>%
     mutate(
       area_id = as.integer(area_id),
-      area_name = map_chr(area_name, ~ clean_text(.x)),
-      area_description = "Lorem Ipsum"
-    )
+      area_name = map_chr(area_name, ~ clean_text(.x))
+    ) %>% 
+    filter(!is.na(area_id))
 }
 
-parse_priorities_tbl <- function(sheets_list, areas_count = 50) {
+parse_priorities_tbl <- function(sheets_list, areas_count) {
   # read and process the priorities table. 
   # amend area_count var if new areas are added
   
@@ -131,10 +139,11 @@ save_tbls <- function(tbl_list){
   # take a named list and write csv's for the portal 
   # and an excel file for introspection
   # csv - semicolon delims
-  nms = paste0("data/", names(tbl_list), ".csv")
+  path <-  "data/portal_upload/"
+  nms <-  paste0(path, names(tbl_list), ".csv")
   walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
   # excel for viewing
-  write_xlsx(tbl_list, path = "data/main_sheets.xlsx")
+  write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
   
 }
 
@@ -144,74 +153,204 @@ make_priority_species_tbl <- function(sheets_list){
 sheets_list %>% 
   pluck("priority_species") %>% 
   rownames_to_column(var = "species_id") %>% 
-  mutate(linnaean_name = str_extract(linnaean,
-                                     "\\*([A-Z][a-z]+\\s[a-z]+)") %>% 
-           str_replace_all("\\*", ""),
-         linnaean = NULL,
-         species_id = as.integer(species_id))
+  mutate(species_id = as.integer(species_id)) %>% 
+    rename(linnaean_name = linnaean)
 }
 
 get_gbif_tbl <- function(priority_species_tbl){
 # get the gbif definitive species data
+  # If this fails ***********CHECK VPN***********
+  test_status <- function(){
+    
+    status_code <- request("https://api.gbif.org/v1/species/match") %>% 
+      req_headers("Accept" = "application/json") %>% 
+      req_url_query(verbose = FALSE,
+                    name = "Apus apus") %>% 
+      req_perform() %>% 
+      resp_status()
+    
+    if (status_code[1] == 200L) TRUE else FALSE
+    
+  }
+  if ( isTRUE(test_status())) {
 priority_species_tbl %>% 
   pull(linnaean_name) %>% 
   name_backbone_checklist() %>% 
   select(-rank, -confidence, -matchType, acceptedUsageKey) %>% 
   mutate(gbif_species_url = glue("https://www.gbif.org/species/{usageKey}"))
+  } else {
+      print("Problem accessing GBIF - check VPN!")
+  }
 }
 
 make_species_area_priority_lookup_tbl <- function(priority_species_tbl){
+  
 priority_species_tbl %>% 
-  separate_longer_delim(cols = relevant_areas,
+  separate_longer_delim(cols = most_relevant_areas,
                         delim = "; ") %>%
   separate_longer_delim(cols = relevant_priorities,
                         delim = "; ") %>%
-  rename(area_id = relevant_areas,
+  rename(area_id = most_relevant_areas,
          priority_id = relevant_priorities) %>%
-  mutate(across(ends_with("_id"), as.integer)) %>%
-  distinct(species_id, area_id, priority_id) 
+  distinct(species_id, area_id, priority_id) %>% 
+  mutate(
+    across(
+      everything(),
+      ~if_else(!str_starts(.x, "[0-9]"),
+               NA_integer_,
+               as.integer(.x))
+      )
+    )
 }
 
 make_species_tbl <- function(priority_species_tbl, gbif_tbl){
 priority_species_tbl %>% 
-  select(-species, -relevant_priorities, -relevant_areas, -link_to_further_guidance, -linnaean_name) %>% 
+  select(-species, -relevant_priorities, -most_relevant_areas, -link_to_further_guidance, -linnaean_name) %>% 
   inner_join(gbif_tbl, by = join_by(species_id == verbatim_index))
 }
 
+parse_cs_grant_codes <- function(sheets_list){
+
+sheets_list %>% 
+    pluck("farming_codes") %>% 
+    filter(scheme == "Countryside Stewardship") %>% 
+    mutate(category = str_to_sentence(meaning),
+         meaning = NULL,
+         scheme = NULL) %>% 
+    rename(code_prefix = code)
+}
+
+# Grants ----
+
+# construct tables of grants and links to be joined to recommendations
+# Countryside Stewardship Grant Links Table ----
+make_url_vec <- function(base_url = "https://www.gov.uk/countryside-stewardship-grants", num_pages = 6){
+  
+  pages_url <- paste0(rep(base_url, num_pages -1), "?page=", 2:num_pages)
+  
+  return(c(base_url, pages_url))
+}
+
+get_links <- function(url){
+  # Read the HTML content of the page
+  page <- read_html(url)
+  # Find all link nodes
+  link_nodes <- html_nodes(page, "a")
+  # output a tibble
+  tibble(
+    text = html_text(link_nodes),
+    url = html_attr(link_nodes, "href"))
+}
+
+make_links_raw_tbl <- function(make_url_vec, get_links){
+  make_url_vec() %>% 
+    map(get_links) %>% 
+    bind_rows()
+}
+
+make_cs_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
+  # clean and wrangle the links to get just the guidance links
+  links_raw_tbl %>% 
+    mutate(grant_name = str_trim(text, side = "both")) %>% 
+    # need to filter for 2 cap letters, numbers colon **and** 2 cap letters, numbers, space
+    filter(str_detect(grant_name, pattern = "^[A-Z]{2}\\d{0,2}:|^[A-Z]{2}\\d{0,2}\\s")) %>% 
+    mutate(url = glue("{domain}{url}"), 
+           text = NULL,
+           grant_id = str_extract(grant_name, "^[^:]+") %>% 
+             str_extract("^\\w+"),
+           grant_scheme = "Countryside Stewardship")
+  # flipping missing colon BC3 BC4
+}
+# Sustainable Farming Initiative Grants Links Table ----
+
+# from Table 1 here https://assets.publishing.service.gov.uk/media/6516c0986a423b0014f4c62e/SFI23_handbook.pdf
+# via chatGPT to parse into table 
+# https://chat.openai.com/c/d5c6018e-f618-4cf3-95df-f9d66fef9e65
+
+clean_sfi_tbl <- function(sfi_raw_tbl, url = "https://assets.publishing.service.gov.uk/media/6516c0986a423b0014f4c62e/SFI23_handbook.pdf"){
+  
+  sfi_raw_tbl %>% 
+    mutate(url = url,
+           grant_name = glue("{code}: {sfi_action}"),
+           grant_scheme = "Sustainable Farming Initiative",
+           grant_id = code,
+           category = str_remove(category, "Actions for ") %>% 
+             str_to_sentence()
+    ) %>% 
+    select(url, grant_name, grant_id,
+           grant_scheme, annual_payment,
+           category) 
+  
+}
+
+make_all_grants_tbl <- function(cs_tbl, sfi_tbl, cs_grant_codes_tbl){
+  
+  bind_rows(cs_tbl, sfi_tbl) %>% 
+    mutate(code_prefix = if_else(str_starts(grant_id, "[A-Z]{2}"),
+                                 str_extract_all(grant_id, "[A-Z]") %>% 
+                                   map_chr(~paste0(.x, collapse = "")),
+                                 "")) %>% 
+    left_join(cs_grant_codes_tbl,
+              by = join_by(code_prefix == code_prefix)) %>% 
+    mutate(grant_focus = coalesce(category.x, category.y),
+           across(starts_with("category"), ~NULL),
+           code_prefix = NULL)
+
+}
 
 # Test functions and generate data ----
 
 sheets_list <- make_list_from_sheets(path, sheets_vec)
+
+
 priority_species_tbl <- make_priority_species_tbl(sheets_list)
 gbif_tbl <- get_gbif_tbl(priority_species_tbl)
 species_tbl <- priority_species_tbl %>% 
   make_species_tbl(gbif_tbl)
 species_area_priority_lookup_tbl <- priority_species_tbl %>% 
   make_species_area_priority_lookup_tbl()
+
 areas_tbl <- parse_areas_tbl(sheets_list)
 
-priorities_tbl <- parse_priorities_tbl(sheets_list, areas_count = 50) %>% 
+priorities_tbl <- parse_priorities_tbl(sheets_list, areas_count = 54) %>% 
   distinct(theme, priority_id, biodiversity_priority)
 
 measures_tbl <- parse_measures_tbl(sheets_list) %>% 
   distinct(measure_id, measure, ambition, land_type)
-priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list) %>% 
+
+priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list, areas_count = 54) %>% 
   distinct(area_id, priority_id)
+
 measures_priority_area_lookup_tbl <- parse_measures_tbl(sheets_list) %>% 
-  distinct(measure_id, area_id, priority_id)
+  distinct(measure_id, area_id, priority_id, link_or_code)
+# Grants
+links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
+cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
+                               domain = "https://www.gov.uk")
+
+sfi_tbl <- clean_sfi_tbl(sfi_raw_tbl = sfi_raw_tbl)
+
+cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
+# Consolidate grant data
+all_grants_tbl <- make_all_grants_tbl(cs_tbl,
+                                      sfi_tbl, 
+                                      cs_grant_codes_tbl)
 
 # Write Data ----
 
 tbl_list <- list(
-  areas = areas_tbl, 
-  priorities = priorities_tbl, 
-  measures = measures_tbl,
-  species = species_tbl,
-  priority_area_lookup = priority_area_lookup_tbl,
-  measures_priority_area_lookup = measures_priority_area_lookup_tbl,
-  species_area_priority_lookup = species_area_priority_lookup_tbl
+  areas_tbl = areas_tbl, 
+  priorities_tbl = priorities_tbl, 
+  measures_tbl = measures_tbl,
+  species_tbl = species_tbl,
+  priority_area_lookup_tbl = priority_area_lookup_tbl,
+  measures_priority_area_lookup_tbl = measures_priority_area_lookup_tbl,
+  species_area_priority_lookup_tbl = species_area_priority_lookup_tbl,
+  all_grants_tbl = all_grants_tbl
                  )
 
 save_tbls(tbl_list)
+
+rlang::as_string(quote(tbl_list))
 
 
