@@ -5,13 +5,25 @@ pacman::p_load(tidyverse,
                ganttrify,
                readxl)
 
+weca_core_colours <- c(
+  "Dark Blue" = "#354753",
+  "Blue" = "#6bd4f2",
+  "Pink" = "#ed749d",
+  "Yellow" = "#ffd900",
+  "Green" = "#79decc") %>% 
+  unname()
+
+date_label <- Sys.Date() %>% 
+  as.character()  %>% 
+  str_replace_all("\\s|\\.|\\:|\\-", "")
+
 # from monitoring framework state of nature:: project plan LOCAL
 
-lnrs_tbl <- read_xlsx('data/Monitoring Framework_State of data_GI WG.xlsx',
-          sheet = 'project_plan')
+lnrs_tbl <- read_xlsx('data/project_plan.xlsx',
+          sheet = 'project_plan_2')
 
-spot_lnrs_tbl <- read_xlsx('data/Monitoring Framework_State of data_GI WG.xlsx',
-                           sheet = "project_spot_data") %>% 
+spot_lnrs_tbl <- read_xlsx('data/project_plan.xlsx',
+                           sheet = "project_spot_data_2") %>% 
   mutate(spot_date = as.Date(spot_date),
          spot_type = toupper(spot_type))
 
@@ -21,13 +33,15 @@ lnrs_clean_tbl <-
   filter(!is.na(activity),
          !is.na(start_date)) %>% 
   fill(wp, .direction = "down") %>% 
-  mutate(across(.cols = ends_with("date"), as.Date)) 
+  mutate(across(.cols = ends_with("date"), as.Date)) %>% 
+  glimpse()
 
 # Make GT table for detailed plan
 
 activity_table_gt <- lnrs_clean_tbl %>% 
   select(wp, activity, detail = Detail, start_date, end_date) %>%
-  mutate(across(.cols = ends_with("date"), .fns = ~format(.x, "%b %y"))) %>% 
+  mutate(across(.cols = ends_with("date"), .fns = ~format(.x, "%b %y")),
+         detail = if_else(is.na(detail), "", detail)) %>% 
   group_by(wp) %>% 
   gt() %>% 
   cols_label_with(columns = ends_with("date"), 
@@ -41,30 +55,12 @@ activity_table_gt <- lnrs_clean_tbl %>%
   tab_style(
     style = cell_text(weight = 'bold', size = 'large'),
     locations = cells_row_groups()
-  ) %>% 
-  tab_style(
-    style = list(
-      cell_fill(color = "#daa3ae"),
-      cell_text(weight = "bold")
-    ),
-    locations = cells_body(
-      columns = activity,
-      rows = str_detect(activity, "DECISION")
-    )
-  )
+  )  
+  
   
 # Output project plan
 activity_table_gt %>% 
-  gtsave('plots/activity_table.png')  
-
-
-weca_core_colours <- c(
-  "Dark Blue" = "#354753",
-  "Blue" = "#6bd4f2",
-  "Pink" = "#ed749d",
-  "Yellow" = "#ffd900",
-  "Green" = "#79decc") %>% 
-  unname()
+  gtsave(glue("plots/activity_table_portal_{date_label}.png"))  
 
 # Ganttrify
 
@@ -77,15 +73,17 @@ gantt_chart <- ganttrify(project = lnrs_clean_tbl,
          by_date = TRUE,
          size_text_relative = 1.2, 
          mark_quarters = TRUE) +
-  labs(title = "Draft LNRS and Nature Data Project Plan",
-       caption = "M = Milestone: D = Decision")
+  labs(title = "Draft Data Portal (LNRS) Project Plan",
+       caption = "M = Milestone")
 
+
+gantt_chart
 # Save
-ggsave('plots/gantt.png',
-       device = 'png',
+ggsave(glue("plots/gantt_portal_{date_label}.png"),
+       device = "png",
        plot = gantt_chart,
        bg = "white", 
-       width = 10,
-       height = 12)
+       width = 15,
+       height = 14)
 
 

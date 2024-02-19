@@ -1,0 +1,14 @@
+The digitised layers for LNRS required a fair bit of pre processing. In general, problems were around invalid geometry and self intersection. Here's what to do.
+
+1. turn from multipart to single part in qgis - this will create new features
+2. open the feature table for the new layer
+3. zoom to layer - for anomalous features you will see e.g. a line, or triangle, usually very small
+4. delete this feature
+5. redigitise features where necessary
+6. create an area field with the field calculator
+7. the anomalous features remaining will have a very small area, like 1 - 5 metres
+8. delete these
+
+WHen you import geojson into qgis it seems to auto filter the layer on the ID field, so a e.g. the priority areas file, which has 110 features only looks like it has 50 features. converting this to single part in qgis creates some anomalous features - wickwar and river avon.
+
+So use the gpkg when importing to qgis as this preserves the original features without filtering

@@ -9,13 +9,37 @@ pacman::p_load(tidyverse,
                rvest)
 
 # Source Data ----
-path = "data/Priorities and Measures Master for portal_working version.xlsx"
+path = "data/Priorities and Measures Master for portal_Updated working version.xlsx"
 sheets_vec <-
   readxl::excel_sheets(path)
 
 sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
 
 # Utility Functions ----
+
+
+# Function to check URL
+check_url <- function(url) {
+  tryCatch({
+    # Create and perform the request
+    response <- request(url) |>
+      req_perform()
+    
+    # Check the status code
+    status_code <- resp_status(response)
+    
+    # Determine if the link is valid based on the status code
+    if (status_code == 200) {
+      TRUE
+    } else {
+      FALSE
+    }
+  }, error = function(e) {
+    FALSE
+  })
+}
+
+
 clean_text <- function(input_string) {
   # Step 1: Replace non-space-padded hyphens with a placeholder
   # Use a unique placeholder that is unlikely to be in the text
@@ -307,18 +331,30 @@ priority_species_tbl <- make_priority_species_tbl(sheets_list)
 gbif_tbl <- get_gbif_tbl(priority_species_tbl)
 species_tbl <- priority_species_tbl %>% 
   make_species_tbl(gbif_tbl)
+
 species_area_priority_lookup_tbl <- priority_species_tbl %>% 
   make_species_area_priority_lookup_tbl()
 
-areas_tbl <- parse_areas_tbl(sheets_list)
+areas_tbl_raw <- parse_areas_tbl(sheets_list)
 
-priorities_tbl <- parse_priorities_tbl(sheets_list, areas_count = 54) %>% 
+areas_tbl <- areas_tbl_raw %>% 
+  select(-funding_schemes)
+
+area_funding_schemes_tbl <- areas_tbl_raw %>% 
+  select(area_id, funding_schemes) %>% 
+  separate_longer_delim(cols = funding_schemes, delim = "\r\n\r\n") %>% 
+  filter(!is.na(funding_schemes)) %>% 
+  mutate(valid  = map_lgl(funding_schemes, check_url)) %>% 
+  filter(valid) %>% 
+  select(-valid)
+
+priorities_tbl <- parse_priorities_tbl(sheets_list, areas_count = 53) %>% 
   distinct(theme, priority_id, biodiversity_priority)
 
 measures_tbl <- parse_measures_tbl(sheets_list) %>% 
   distinct(measure_id, measure, ambition, land_type)
 
-priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list, areas_count = 54) %>% 
+priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list, areas_count = 53) %>% 
   distinct(area_id, priority_id)
 
 measures_priority_area_lookup_tbl <- parse_measures_tbl(sheets_list) %>% 
@@ -327,8 +363,14 @@ measures_priority_area_lookup_tbl <- parse_measures_tbl(sheets_list) %>%
 links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
 cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
                                domain = "https://www.gov.uk")
+# all urls good?
+map_lgl(cs_tbl$url, check_url) %>% 
+  all()
 
 sfi_tbl <- clean_sfi_tbl(sfi_raw_tbl = sfi_raw_tbl)
+
+map_lgl(sfi_tbl$url, check_url) %>% 
+  all()
 
 cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
 # Consolidate grant data
@@ -338,15 +380,17 @@ all_grants_tbl <- make_all_grants_tbl(cs_tbl,
 
 # Write Data ----
 
+
 tbl_list <- list(
-  areas_tbl = areas_tbl, 
-  priorities_tbl = priorities_tbl, 
-  measures_tbl = measures_tbl,
-  species_tbl = species_tbl,
-  priority_area_lookup_tbl = priority_area_lookup_tbl,
-  measures_priority_area_lookup_tbl = measures_priority_area_lookup_tbl,
-  species_area_priority_lookup_tbl = species_area_priority_lookup_tbl,
-  all_grants_tbl = all_grants_tbl
+  "lnrs-areas-tbl" = areas_tbl, 
+  "lnrs-priorities-tbl" = priorities_tbl, 
+  "lnrs-measures-tbl" = measures_tbl,
+  "lnrs-species-tbl" = species_tbl,
+  "lnrs-priority-area-lookup_tbl" = priority_area_lookup_tbl,
+  "lnrs-measures-priority-area-lookup-tbl" = measures_priority_area_lookup_tbl,
+  "lnrs-species-area-priority-lookup-tbl" = species_area_priority_lookup_tbl,
+  "lnrs-all-grants-tbl" = all_grants_tbl,
+  "lnrs-area-funding-schemes-tbl" = area_funding_schemes_tbl
                  )
 
 save_tbls(tbl_list)
