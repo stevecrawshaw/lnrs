@@ -17,7 +17,6 @@ sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
 
 # Utility Functions ----
 
-
 # Function to check URL
 check_url <- function(url) {
   tryCatch({
