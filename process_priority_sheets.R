@@ -354,10 +354,17 @@ measures_tbl <- parse_measures_tbl(sheets_list) %>%
   distinct(measure_id, measure, ambition, land_type)
 
 priority_area_lookup_tbl <- parse_priorities_tbl(sheets_list, areas_count = 53) %>% 
-  distinct(area_id, priority_id)
+  distinct(area_id, priority_id) %>% 
+  filter(area_id %in% areas_tbl$area_id,
+         priority_id %in% priorities_tbl$priority_id)
 
 measures_priority_area_lookup_tbl <- parse_measures_tbl(sheets_list) %>% 
-  distinct(measure_id, area_id, priority_id, link_or_code)
+  distinct(measure_id, area_id, priority_id, link_or_code) #%>% 
+  filter(area_id %in% areas_tbl$area_id,
+         # measure_id %in% measures_tbl$measure_id,
+         #priority_id %in% priorities_tbl$priority_id
+         )
+
 # Grants
 links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
 cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
@@ -385,7 +392,7 @@ tbl_list <- list(
   "lnrs-priorities-tbl" = priorities_tbl, 
   "lnrs-measures-tbl" = measures_tbl,
   "lnrs-species-tbl" = species_tbl,
-  "lnrs-priority-area-lookup_tbl" = priority_area_lookup_tbl,
+  "lnrs-priority-area-lookup-tbl" = priority_area_lookup_tbl,
   "lnrs-measures-priority-area-lookup-tbl" = measures_priority_area_lookup_tbl,
   "lnrs-species-area-priority-lookup-tbl" = species_area_priority_lookup_tbl,
   "lnrs-all-grants-tbl" = all_grants_tbl,
