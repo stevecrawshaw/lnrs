@@ -8,6 +8,8 @@ pacman::p_load(tidyverse,
                httr2,
                rvest)
 
+# see plots/schema2.pdf
+
 # Source Data ----
 path = "data/Priorities and Measures Master for portal_Updated working version.xlsx"
 sheets_vec <-
@@ -28,6 +30,18 @@ sheets_list <- make_list_from_sheets(path, sheets_vec)
 sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
 
 # Utility Functions ----
+
+save_tbls <- function(tbl_list){
+  # take a named list and write csv's for the portal 
+  # and an excel file for introspection
+  # csv - semicolon delims
+  path <-  "data/portal_upload/"
+  nms <-  paste0(path, names(tbl_list), ".csv")
+  walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
+  # excel for viewing
+  write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
+  
+}
 
 # Function to check URL
 check_url <- function(url) {
@@ -127,12 +141,13 @@ priorities_tbl %>% glimpse()
 
 # separate out measures tables, one by priority, one by area
 # measures by PRIORITY
-measures_by_priority_tbl <- 
+measures_by_priority_interim_tbl <- 
   sheets_list %>% 
   pluck("measures_by_priority") %>% 
   rownames_to_column(var = "measure_id") %>%
   mutate(
-    measure_id = as.integer(measure_id),
+    priority_measure_id = as.integer(measure_id),
+    measure_id = NULL,
     across(.cols = c(level_of_ambition, land_type),
            ~na_if(.x, "N/A")),
     associated_priority_number_1 = as.character(associated_priority_number_1),
@@ -143,155 +158,64 @@ measures_by_priority_tbl <-
     measure_type = "Priority",
     associated_priority_number_1 = NULL,
     other_relevant_priorities = NULL
-         )
+         ) %>% 
+  rename(measure = recommended_measure)
 
-measures_by_priority_tbl %>% glimpse()
+priority_measures_tbl  <- 
+  measures_by_priority_interim_tbl %>% 
+  select(-c(priority_id, other, woodland, sfi, countryside_stewardship)) %>% 
+  relocate(measure, priority_measure_id, everything())
+
+priority_measures_tbl %>% glimpse()
+  
 
 # measures by AREA
 
-measures_by_area_tbl <- sheets_list %>% 
+measures_by_area_interim_tbl <- sheets_list %>% 
   pluck("measures_by_area") %>% 
-  mutate(measure_id = max(measures_by_priority_tbl$measure_id) + 1:nrow(.),
+  rownames_to_column("area_measure_id") %>% 
+  mutate(area_measure_id = as.integer(area_measure_id),
          across(.cols = c(level_of_ambition, land_type),
                 ~na_if(.x, "N/A")),
          across(.cols = c(sfi, woodland, other), ~NULL),
          measure_type = "Area"
-         )
+         ) 
 
-measures_by_area_tbl %>% glimpse()
+measures_by_area_interim_tbl %>% glimpse()
+
+
+priorities_areas_measures_lookup_tbl <- 
+measures_by_area_interim_tbl %>% 
+  transmute(area_id = associated_area_codes,
+         area_measure_id,
+         priority_id = as.integer(associated_priority)) %>% 
+  separate_longer_delim(cols = area_id, delim = "; ") %>% 
+  rownames_to_column("id") %>% 
+  mutate(id = as.integer(id),
+         area_id = as.integer(area_id))
+
+priorities_areas_measures_lookup_tbl %>% glimpse()
 
 # make single measures tbl
-fact_measures_by_area_tbl <- measures_by_area_tbl %>% 
+area_measures_tbl <- measures_by_area_interim_tbl %>% 
   select(measure = recommended_measures,
-         measure_id,
+         area_measure_id,
          measure_type,
          level_of_ambition)
 
-fact_measures_by_area_tbl %>% glimpse()
+area_measures_tbl %>% glimpse()
 
-fact_measures_by_priority_tbl <- measures_by_priority_tbl %>% 
-  select(measure = recommended_measure,
-         measure_id,
-         measure_type,
-         level_of_ambition)
 
-fact_measures_by_priority_tbl %>% glimpse()
-
-fact_measures_tbl <- bind_rows(fact_measures_by_priority_tbl,
-                               fact_measures_by_area_tbl)
-
-fact_measures_tbl %>% glimpse()
-
-# make dim measures_priority tbl
-# lengthen by separating rows with delimited contents
-dim_measures_priority_tbl <- measures_by_priority_tbl %>% 
-  separate_longer_delim(cols = land_type,
-                        delim = "; ") %>%
-  separate_longer_delim(cols = stakeholder,
-                        delim = "; ") %>% 
-  separate_longer_delim(cols = countryside_stewardship,
-                      delim = "; ") %>% 
-  separate_longer_delim(cols = sfi,
-                        delim = "; ") %>% 
+priorities_measures_lookup_tbl <- 
+  measures_by_priority_interim_tbl %>% 
+  select(priority_id, priority_measure_id) %>% 
   separate_longer_delim(cols = priority_id,
                         delim = ",") %>%
-  mutate(priority_id = as.integer(priority_id)) %>% 
-  select(-recommended_measure, -level_of_ambition)
-
-dim_measures_priority_tbl %>% 
-  glimpse()
+  mutate(priority_id = as.integer(priority_id)) 
+  
+  priorities_measures_lookup_tbl %>% glimpse()
   
 
-# Make dim measures_by_area_tbl
-
-dim_measures_area_tbl <- 
-  measures_by_area_tbl %>% 
-  separate_longer_delim(cols = stakeholder, delim = "; ") %>%
-  separate_longer_delim(cols = associated_area_codes, delim = "; ") %>%
-  separate_longer_delim(cols = countryside_stewardship, delim = "; ") %>% 
-  select(-recommended_measures, -level_of_ambition) %>% 
-  rename(priority_id = associated_priority,
-         area_id = associated_area_codes) %>% 
-  mutate(area_id = as.integer(area_id))
-  
-dim_measures_area_tbl %>% glimpse()
-
-
-
-
-
-
-
-parse_measures_tbl <- function(sheets_list){
- # consolidate measures by priority and measures by area sheets
-  # extend, separating out codes
-  
-  # need to sort out the grants - pivoting longer etc.
-  
-measures_priority_tbl <- sheets_list %>% pluck("measures_by_priority") 
-measures_area_tbl <- sheets_list %>% pluck("measures_by_area") 
-
-measures_tbl <- bind_rows(measures_area_tbl, measures_priority_tbl)
-
-measures_tbl %>% 
-  mutate(measure = coalesce(recommended_measures, 
-                            recommended_measure)
-         ) %>% 
-  rownames_to_column(var = "measure_id") %>% 
-  mutate(across(.cols = c(level_of_ambition, land_type),
-                .fn = ~if_else(.x == "N/A",
-                               NA_character_,
-                               .x)),
-         # remove text descriptions and add a PH1 placeholder
-         # designation pending assignation of correct codes
-         countryside_stewardship = if_else(!str_starts(countryside_stewardship,
-                                 "\\b[A-Z]{2}\\d{1,2}\\b"),
-                      "PH1", countryside_stewardship) %>%
-           str_extract_all("\\b[A-Z]{2}\\d{1,2};?\\b") %>% 
-           map_chr( ~paste0(.x, collapse = "; ")),
-         #paste0(..., collapse) coerces NA to "NA"!
-         countryside_stewardship = if_else(countryside_stewardship == "NA",
-                                           NA_character_,
-                                           countryside_stewardship)) %>% 
-  separate_longer_delim(cols = c(stakeholder,
-                                 countryside_stewardship,
-                                 sfi),
-                        delim = "; ") %>% 
-  pivot_longer(starts_with("associated_priority"),
-               values_to = "priority_id") %>% 
-  filter(!is.na(priority_id)) %>% 
-  select(-name,
-         -starts_with("recommended")) %>%
-  # line below fails if done above!
-  
-  separate_longer_delim(associated_area_codes,
-                        delim = "; ") %>% 
-  pivot_longer(cols = c(countryside_stewardship, sfi, woodland, other),
-                 names_to = "grant_scheme",
-                 values_to = "link_or_code") %>% 
-  filter(!is.na(link_or_code)) %>% 
-  select(measure_id, measure, ambition = level_of_ambition, land_type,
-         stakeholder_type = stakeholder, area_id = associated_area_codes,
-         priority_id, guidance = link_to_further_guidance, everything()) %>% 
-  mutate(across(.cols = ends_with("_id"), as.integer))
-}
-
-
-measures_tbl <- parse_measures_tbl(sheets_list)
-
-
-
-save_tbls <- function(tbl_list){
-  # take a named list and write csv's for the portal 
-  # and an excel file for introspection
-  # csv - semicolon delims
-  path <-  "data/portal_upload/"
-  nms <-  paste0(path, names(tbl_list), ".csv")
-  walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
-  # excel for viewing
-  write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
-  
-}
 
 # Use chat GPT to get the Linnaean names https://chat.openai.com/share/086bf029-f2a7-409a-b60c-a5964015df21
 
@@ -329,25 +253,6 @@ priority_species_tbl %>%
   }
 }
 
-make_species_area_priority_lookup_tbl <- function(priority_species_tbl){
-  
-priority_species_tbl %>% 
-  separate_longer_delim(cols = most_relevant_areas,
-                        delim = "; ") %>%
-  separate_longer_delim(cols = relevant_priorities,
-                        delim = "; ") %>%
-  rename(area_id = most_relevant_areas,
-         priority_id = relevant_priorities) %>%
-  distinct(species_id, area_id, priority_id) %>% 
-  mutate(
-    across(
-      everything(),
-      ~if_else(!str_starts(.x, "[0-9]"),
-               NA_integer_,
-               as.integer(.x))
-      )
-    )
-}
 
 make_species_tbl <- function(priority_species_tbl, gbif_tbl){
 priority_species_tbl %>% 
