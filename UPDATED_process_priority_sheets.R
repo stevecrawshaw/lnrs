@@ -6,7 +6,8 @@ pacman::p_load(tidyverse,
                writexl,
                rgbif,
                httr2,
-               rvest)
+               rvest,
+               rlist)
 
 # see plots/schema2.pdf
 
@@ -35,11 +36,10 @@ check_valid_grant_string <- function(x){
   str_starts(x, "^[A-Z]{2}") & str_ends(x, "[0-9]")
 }
 
-save_tbls <- function(tbl_list){
+save_tbls <- function(tbl_list, path = "data/portal_upload/"){
   # take a named list and write csv's for the portal 
   # and an excel file for introspection
   # csv - semicolon delims
-  path <-  "data/portal_upload/"
   nms <-  paste0(path, names(tbl_list), ".csv")
   walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
   # excel for viewing
@@ -106,7 +106,23 @@ parse_areas_tbl <- function(sheets_list) {
     filter(!is.na(area_id))
 }
 
-areas_tbl <- parse_areas_tbl(sheets_list)
+interim_areas_tbl <- parse_areas_tbl(sheets_list)
+
+area_funding_schemes_tbl <- interim_areas_tbl %>% 
+  select(area_id, funding_schemes) %>% 
+  separate_longer_delim(cols = funding_schemes, delim = "\r\n\r\n") %>% 
+  filter(!is.na(funding_schemes)) %>% 
+  mutate(valid  = map_lgl(funding_schemes, check_url)) %>% 
+  filter(valid) %>% 
+  select(-valid) %>% 
+  add_id()
+
+area_funding_schemes_tbl %>% glimpse()
+
+areas_tbl <- interim_areas_tbl %>% 
+  select(-funding_schemes)
+
+areas_tbl %>% glimpse()
 
 parse_priorities_tbl <- function(sheets_list, areas_tbl, areas_start_col = 5) {
   # read and process the priorities table. 
@@ -172,8 +188,7 @@ measures_by_priority_interim_tbl <-
     priority_id = if_else(
            !is.na(other_relevant_priorities),
            glue("{associated_priority_number_1},{other_relevant_priorities}"),
-           associated_priority_number_1                              ),
-    measure_type = "Priority",
+           associated_priority_number_1),
     associated_priority_number_1 = NULL,
     other_relevant_priorities = NULL
          ) %>% 
@@ -213,7 +228,7 @@ bind_rows(sfi, cs)
 }
 
 
-priority_measures_grant_lookup_tbl <- make_priority_measures_grant_lookup_tbl(priority_measures_grant_interim_tbl)
+priority_measures_grants_lookup_tbl <- make_priority_measures_grant_lookup_tbl(priority_measures_grant_interim_tbl)
 
 
 priority_measures_tbl  <- 
@@ -232,13 +247,12 @@ measures_by_area_interim_tbl <- sheets_list %>%
   mutate(area_measure_id = as.integer(area_measure_id),
          across(.cols = c(level_of_ambition, land_type),
                 ~na_if(.x, "N/A")),
-         across(.cols = c(sfi, woodland, other), ~NULL),
-         measure_type = "Area"
+         across(.cols = c(sfi, woodland, other), ~NULL)
          ) 
 
 measures_by_area_interim_tbl %>% glimpse()
 
-area_measures_grants_tbl <- measures_by_area_interim_tbl %>% 
+areas_measures_grants_lookup_tbl <- measures_by_area_interim_tbl %>% 
   select(area_measure_id, countryside_stewardship) %>% 
   mutate(cs_clean = if_else(
     check_valid_grant_string(countryside_stewardship),
@@ -246,9 +260,10 @@ area_measures_grants_tbl <- measures_by_area_interim_tbl %>%
     NA_character_),
     countryside_stewardship = NULL) %>% 
   separate_longer_delim(cs_clean, "; ") %>% 
-  filter(!is.na(cs_clean))
+  filter(!is.na(cs_clean)) %>% 
+  rename(grant_id = cs_clean)
 
-area_measures_grants_tbl %>% glimpse()
+areas_measures_grants_lookup_tbl %>% glimpse()
 
 priorities_areas_measures_lookup_tbl <- 
 measures_by_area_interim_tbl %>% 
@@ -265,8 +280,9 @@ priorities_areas_measures_lookup_tbl %>% glimpse()
 area_measures_tbl <- measures_by_area_interim_tbl %>% 
   select(measure = recommended_measures,
          area_measure_id,
-         measure_type,
-         level_of_ambition)
+         level_of_ambition,
+         land_type,
+         stakeholder)
 
 area_measures_tbl %>% glimpse()
 
@@ -313,16 +329,17 @@ priority_species_tbl %>%
   pull(linnaean_name) %>% 
   name_backbone_checklist() %>% 
   select(-rank, -confidence, -matchType, acceptedUsageKey) %>% 
-  mutate(gbif_species_url = glue("https://www.gbif.org/species/{usageKey}"))
+  mutate(gbif_species_url = glue("https://www.gbif.org/species/{usageKey}")) %>% 
+      clean_names()
   } else {
       print("Problem accessing GBIF - check VPN!")
   }
 }
 
-
 make_species_tbl <- function(priority_species_tbl, gbif_tbl){
 priority_species_tbl %>% 
-  select(-species, -relevant_priorities, -link_to_further_guidance, -linnaean_name) %>% 
+  select(-relevant_priorities, -link_to_further_guidance, -linnaean_name) %>% 
+    rename(common_name = species) %>% 
   inner_join(gbif_tbl, by = join_by(species_id == verbatim_index))
 }
 
@@ -453,16 +470,7 @@ species_area_lookup_tbl <- sheets_list %>%
 species_area_lookup_tbl %>% glimpse()
 
 
-area_funding_schemes_tbl <- areas_tbl %>% 
-  select(area_id, funding_schemes) %>% 
-  separate_longer_delim(cols = funding_schemes, delim = "\r\n\r\n") %>% 
-  filter(!is.na(funding_schemes)) %>% 
-  mutate(valid  = map_lgl(funding_schemes, check_url)) %>% 
-  filter(valid) %>% 
-  select(-valid) %>% 
-  add_id()
 
-area_funding_schemes_tbl %>% glimpse()
 
 areas_count = nrow(areas_tbl)
 
@@ -483,7 +491,7 @@ map_lgl(sfi_tbl$url, check_url) %>%
 cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
 # Consolidate grant data
 
-grants_tbl <- make_all_grants_tbl(cs_tbl,
+grants_tbl <- make_grants_tbl(cs_tbl,
                                   sfi_tbl, 
                                   cs_grant_codes_tbl) %>% 
   add_id()
@@ -492,19 +500,27 @@ grants_tbl <- make_all_grants_tbl(cs_tbl,
 
 
 tbl_list <- list(
-  "lnrs-areas-tbl" = areas_tbl, 
-  "lnrs-priorities-tbl" = priorities_tbl, 
-  "lnrs-measures-tbl" = measures_tbl,
-  "lnrs-species-tbl" = species_tbl,
-  "lnrs-priority-area-lookup-tbl" = priority_area_lookup_tbl,
-  "lnrs-measures-priority-area-lookup-tbl" = measures_priority_area_lookup_tbl,
-  "lnrs-species-area-priority-lookup-tbl" = species_area_priority_lookup_tbl,
-  "lnrs-all-grants-tbl" = all_grants_tbl,
-  "lnrs-area-funding-schemes-tbl" = area_funding_schemes_tbl
+  "areas-tbl" = areas_tbl, 
+  "priorities-tbl" = priorities_tbl, 
+  "species-tbl" = species_tbl,
+  "area-measures-tbl" = area_measures_tbl,
+  "priority-measures-tbl" = priority_measures_tbl,
+  "priorities-areas-lookup-tbl" = priorities_areas_lookup_tbl,
+  "priorities-measures-lookup-tbl" = priorities_measures_lookup_tbl,
+  "priorities-areas-measures-lookup-tbl" = priorities_areas_measures_lookup_tbl,
+  "species-area-lookup-tbl" = species_area_lookup_tbl,
+  "species-priority-lookup-tbl" = species_priority_lookup_tbl,
+  "area-funding-schemes-tbl" = area_funding_schemes_tbl,
+  "priority-measures-grants-lookup-tbl" = priority_measures_grants_lookup_tbl,
+  "areas-measures-grants-lookup-tbl" = areas_measures_grants_lookup_tbl,
+  "grants_tbl" = grants_tbl
                  )
 
-save_tbls(tbl_list)
+save_tbls(tbl_list, path = "data/portal_upload/")
 
-rlang::as_string(quote(tbl_list))
-
+base_tbls_list <- base::setdiff(tbl_list,
+tbl_list %>% 
+  list.match("lookup")
+)
+map(base_tbls_list, names)
 
