@@ -533,7 +533,7 @@ tbl_list <- list(
                  )
 
 save_tbls(tbl_list, path = "data/portal_upload/")
-
+# print the CORE tbls
 base_tbls_list <- base::setdiff(tbl_list,
 tbl_list %>% 
   list.match("lookup")
