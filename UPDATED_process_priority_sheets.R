@@ -532,6 +532,8 @@ tbl_list <- list(
   "grants-tbl" = grants_tbl
                  )
 
+write_rds(tbl_list, "data/portal_tbl_list.rds")
+
 save_tbls(tbl_list, path = "data/portal_upload/")
 # print the CORE tbls
 base_tbls_list <- base::setdiff(tbl_list,
