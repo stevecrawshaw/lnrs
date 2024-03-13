@@ -1,7 +1,8 @@
 pacman::p_load(tidyverse,
                glue,
                janitor,
-               fs)
+               fs,
+               fontawesome)
 
 tbl_list <- read_rds("portal_tbl_list.rds")
 
@@ -11,9 +12,10 @@ list2env(tbl_list, .GlobalEnv)
 
 clean_text <- function(x){ 
   x %>% 
-    str_remove_all("\nNA") %>% 
+    str_remove_all("\nNA|NA\n") %>% 
     str_split("\n") %>% 
-    unlist() %>% 
+    unlist() %>%
+    paste("●", .) %>% 
     unique() %>% 
     paste(collapse = "\n") 
 }
@@ -48,7 +50,9 @@ grants_measures_tbl <- grants_tbl %>%
   mutate(priority_id = glue("{priority_id_priority_measures};{priority_id_area_measures}")) %>% 
   separate_longer_delim(priority_id, delim = ";") %>% 
   filter(!is.na(priority_id) & !is.na(area_id)) %>% 
-  mutate(priority_id = na_if(priority_id, "NA") %>% as.integer()) %>% 
+  mutate(priority_id = na_if(priority_id, "NA") %>% as.integer(),
+         grant_link = url) %>% 
+  # mutate(grant_link = glue("<a href={url}  target=\"_blank\">{grant_name}</a>")) %>% 
   arrange(area_id, priority_id)
 
 
@@ -58,7 +62,7 @@ priorities_areas_tbl <- priorities_areas_lookup_tbl %>%
   select(-id) %>% 
   arrange(area_id, priority_id)
 
-priorities_areas_tbl %>% view()
+priorities_areas_tbl %>% glimpse()
 
 consolidated_tbl <- priorities_areas_tbl %>% 
   left_join(grants_measures_tbl, by = join_by(
@@ -69,26 +73,23 @@ consolidated_tbl <- priorities_areas_tbl %>%
 
 consolidated_tbl %>% view()
 
-grpd_tbl <- consolidated_tbl %>% 
-  group_by(area_id, area_name, area_description, area_link,
-           priority_id, biodiversity_priority, simplified_biodiversity_priority) %>% 
-  summarise(across(.cols = c(grant_name, measure_priority, measure_area),
+grpd_tbl2 <- consolidated_tbl %>% 
+  group_by(area_id, area_name, area_description, area_link) %>% 
+  summarise(across(.cols = c(grant_name, measure_priority, measure_area, biodiversity_priority, simplified_biodiversity_priority, theme, grant_link),
                    ~paste(.x, collapse = "\n"))) %>% 
-  mutate(across(.cols = c(grant_name, measure_priority, measure_area),
-                clean_text))
+  mutate(across(.cols = c(grant_name, measure_priority, measure_area, biodiversity_priority, simplified_biodiversity_priority, theme, grant_link),
+                clean_text)) %>% 
+  mutate(across(everything(), ~na_if(.x, "● NA"))) %>% 
+  mutate(grant_link = str_remove_all(grant_link, "● "))
 
 
-grpd_tbl %>% view()
+grpd_tbl2 %>% view()
 
-grpd_tbl %>% ungroup() %>% 
-  select(measure_priority_clean) %>% head()
-
-
-d <- grpd_tbl$measure_priority[3]
+grpd_tbl2 %>% 
+  write.csv2("data/trial_areas.csv", na = "", row.names = FALSE)
 
 
-
-
+# -------------------------------------------------
 
 comb_tbl <- areas_tbl %>% 
   left_join(priorities_areas_lookup_tbl, by = join_by(area_id == area_id)) %>% 
