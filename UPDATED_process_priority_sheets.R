@@ -12,12 +12,13 @@ pacman::p_load(tidyverse,
 # see plots/schema2.pdf
 
 # Source Data ----
-path = "data/Priorities and Measures Master for portal_Updated working version.xlsx"
+# April 2024
+path = "data/NEW_Priorities and Measures Master for portal_updated with measures vs area.xlsx"
 sheets_vec <-
   readxl::excel_sheets(path)
 
 make_list_from_sheets <- function(
-    path = "data/Priorities and Measures Master for portal_working version.xlsx",
+    path = "data/NEW_Priorities and Measures Master for portal_updated with measures vs area.xlsx",
     sheets_vec) {
   # read all the sheets and store in a list with each element a sheet
   sheets_vec %>%
@@ -32,9 +33,16 @@ sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
 
 # Utility Functions ----
 
-check_valid_grant_string <- function(x){
-  str_starts(x, "^[A-Z]{2}") & str_ends(x, "[0-9]")
+check_valid_grant_string <- function(x, letters = 2){
+  
+  if (letters == 2){
+    pattern = "^[A-Z]{2}\\d+$"
+  } else if (letters == 3) {
+    pattern = "^[A-Z]{3}\\d+$"
+  }
+  str_detect(x, pattern)
 }
+
 
 save_tbls <- function(tbl_list, path = "data/portal_upload/"){
   # take a named list and write csv's for the portal 
@@ -178,138 +186,198 @@ priorities_tbl <- priorities_area_tbl %>%
 
 priorities_tbl %>% glimpse()
 
+# measures table processing functions
 
-# separate out measures tables, one by priority, one by area
-# measures by PRIORITY
-measures_by_priority_interim_tbl <- 
-  sheets_list %>% 
-  pluck("measures_by_priority") %>% 
-  rownames_to_column(var = "measure_id") %>%
-  mutate(
-    priority_measure_id = as.integer(measure_id),
-    measure_id = NULL,
-    across(.cols = c(level_of_ambition, land_type),
-           ~na_if(.x, "N/A")),
-    associated_priority_number_1 = as.character(associated_priority_number_1),
-    priority_id = if_else(
-           !is.na(other_relevant_priorities),
-           glue("{associated_priority_number_1},{other_relevant_priorities}"),
-           associated_priority_number_1),
-    associated_priority_number_1 = NULL,
-    other_relevant_priorities = NULL
-         ) %>% 
-  rename(measure = recommended_measure)
-
-
-priority_measures_grant_interim_tbl <- 
-  measures_by_priority_interim_tbl %>% 
-  select(priority_measure_id,
-         countryside_stewardship,
-         sfi) %>% 
-  mutate(cs_clean = if_else(
-    check_valid_grant_string(countryside_stewardship),
-    countryside_stewardship,
-    NA_character_),
-    sfi_clean = if_else(
-      check_valid_grant_string(sfi),
-      sfi,
-      NA_character_),
-    countryside_stewardship = NULL,
-    sfi = NULL) %>% 
-  separate_longer_delim(cs_clean, "; ") %>% 
-  separate_longer_delim(sfi_clean, "; ") 
+rename_dirty_sheet <- function(sheets_list,
+                               tbl = "measures_by_area",
+                               end_of_first = 13,
+                               end_of_second = 65,
+                               measures_n = 153 
+){
+  # rename the measures_by_area sheet
+  measures_by_area_interim_tbl <- sheets_list %>% 
+    pluck(tbl)
   
-
-make_priority_measures_grant_lookup_tbl <- function(priority_measures_grant_interim_tbl){
-  # collate the 2 types of grant by priority_measures_id
-  sfi <- priority_measures_grant_interim_tbl %>% 
-    select(priority_measure_id, grant_id = sfi_clean) %>% 
-    filter(!is.na(grant_id))
+  first_half_range <- 1:end_of_first
+  second_half_range <- (end_of_first + 1):end_of_second
   
-  cs <- priority_measures_grant_interim_tbl %>% 
-    select(priority_measure_id, grant_id = cs_clean) %>% 
-    filter(!is.na(grant_id))
-bind_rows(sfi, cs)  %>% 
-  add_id() %>% 
-  relocate(id, priority_measure_id, grant_id)
+  first_half_names <- measures_by_area_interim_tbl[1, first_half_range] %>% 
+    as.character() %>% 
+    make_clean_names()
+  
+  second_half_names <- measures_by_area_interim_tbl[1, second_half_range] %>%
+    names() %>% 
+    map_chr(~str_extract(.x, "[0-9]+")) 
+  
+  all_names <- c(first_half_names, second_half_names)  
+  
+  measures_by_area_interim_tbl[2:measures_n,] %>% 
+    set_names(all_names)
+  
+}
+
+make_measures_area_tbl_1 <- function(measures_area_tbl_interim){
+  
+  measures_area_tbl_interim %>%
+    rownames_to_column("area_measure_id") %>% 
+    mutate(area_measure_id = as.integer(area_measure_id),
+           across(.cols = c(level_of_ambition,
+                            land_type,
+                            stakeholder,
+                            sfi,
+                            relevant_map_layer,
+                            link_to_further_guidance),
+                  ~na_if(.x, "N/A")),
+           across(.cols = c(woodland, other), ~NULL)
+    ) 
+}
+
+make_measures_area_tbl <- function(measures_area_tbl_1,
+                                   areas_start_col = 13){
+  
+  measures_area_tbl_1 %>%
+    mutate(across(
+      .cols = all_of(areas_start_col:last_col()),
+      ~ if_else(.x == "x", cur_column(),
+                NA_character_)
+    )) %>%
+    pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id", names_to = NULL) %>% 
+    filter(!is.na(area_id)) %>% 
+    separate_longer_delim(cols = c(land_type), delim = "; ") %>% 
+    separate_longer_delim(cols = stakeholder, delim = "; ") %>% 
+    select(-c(theme, biodiversity_priority), priority_id = associated_priority_code, sfi) %>% 
+    mutate(across(.cols = ends_with("_id"), as.integer))
   
 }
 
 
-priority_measures_grants_lookup_tbl <- make_priority_measures_grant_lookup_tbl(priority_measures_grant_interim_tbl)
-
-
-priority_measures_tbl  <- 
-  measures_by_priority_interim_tbl %>% 
-  select(-c(priority_id, other, woodland, sfi, countryside_stewardship)) %>% 
-  relocate(priority_measure_id, measure,everything())
-
-priority_measures_tbl %>% glimpse()
+# separate out measures tables, one by priority, one by area
+# measures by PRIORITY ----
+# Deprecated as a component of the data since April 2024
+# measures_by_priority_interim_tbl <- 
+#   sheets_list %>% 
+#   pluck("measures_by_priority") %>% 
+#   rownames_to_column(var = "measure_id") %>%
+#   mutate(
+#     priority_measure_id = as.integer(measure_id),
+#     measure_id = NULL,
+#     across(.cols = c(level_of_ambition, land_type),
+#            ~na_if(.x, "N/A")),
+#     associated_priority_number_1 = as.character(associated_priority_number_1),
+#     priority_id = if_else(
+#            !is.na(other_relevant_priorities),
+#            glue("{associated_priority_number_1},{other_relevant_priorities}"),
+#            associated_priority_number_1),
+#     associated_priority_number_1 = NULL,
+#     other_relevant_priorities = NULL
+#          ) %>% 
+#   rename(measure = recommended_measure)
+# 
+# 
+# priority_measures_grant_interim_tbl <- 
+#   measures_by_priority_interim_tbl %>% 
+#   select(priority_measure_id,
+#          countryside_stewardship,
+#          sfi) %>% 
+#   mutate(cs_clean = if_else(
+#     check_valid_grant_string(countryside_stewardship),
+#     countryside_stewardship,
+#     NA_character_),
+#     sfi_clean = if_else(
+#       check_valid_grant_string(sfi),
+#       sfi,
+#       NA_character_),
+#     countryside_stewardship = NULL,
+#     sfi = NULL) %>% 
+#   separate_longer_delim(cs_clean, "; ") %>% 
+#   separate_longer_delim(sfi_clean, "; ") 
+#   
+# 
+# make_priority_measures_grant_lookup_tbl <- function(priority_measures_grant_interim_tbl){
+#   # collate the 2 types of grant by priority_measures_id
+#   sfi <- priority_measures_grant_interim_tbl %>% 
+#     select(priority_measure_id, grant_id = sfi_clean) %>% 
+#     filter(!is.na(grant_id))
+#   
+#   cs <- priority_measures_grant_interim_tbl %>% 
+#     select(priority_measure_id, grant_id = cs_clean) %>% 
+#     filter(!is.na(grant_id))
+# bind_rows(sfi, cs)  %>% 
+#   add_id() %>% 
+#   relocate(id, priority_measure_id, grant_id)
+#   
+# }
+# 
+# 
+# priority_measures_grants_lookup_tbl <- make_priority_measures_grant_lookup_tbl(priority_measures_grant_interim_tbl)
+# 
+# 
+# priority_measures_tbl  <- 
+#   measures_by_priority_interim_tbl %>% 
+#   select(-c(priority_id, other, woodland, sfi, countryside_stewardship)) %>% 
+#   relocate(priority_measure_id, measure,everything())
+# 
+# priority_measures_tbl %>% glimpse()
   
 
-# measures by AREA
+# measures by AREA ----
+areas_start_col = 13
+# make the measures by area table
+measures_area_tbl <- rename_dirty_sheet(sheets_list,
+                                        tbl = "measures_by_area",
+                                        end_of_first = 13,
+                                        end_of_second = 65,
+                                        measures_n = 153 ) %>% 
+  make_measures_area_tbl_1() %>% 
+    make_measures_area_tbl(areas_start_col = 13)
 
-measures_by_area_interim_tbl <- sheets_list %>% 
-  pluck("measures_by_area") %>% 
-  rownames_to_column("area_measure_id") %>% 
-  mutate(area_measure_id = as.integer(area_measure_id),
-         across(.cols = c(level_of_ambition, land_type),
-                ~na_if(.x, "N/A")),
-         across(.cols = c(sfi, woodland, other), ~NULL)
-         ) 
 
-measures_by_area_interim_tbl %>% glimpse()
-
-areas_measures_grants_lookup_tbl <- measures_by_area_interim_tbl %>% 
-  select(area_measure_id, countryside_stewardship) %>% 
-  mutate(cs_clean = if_else(
-    check_valid_grant_string(countryside_stewardship),
+areas_measures_grants_lookup_tbl <- measures_area_tbl %>% 
+  select(area_measure_id, countryside_stewardship, sfi, priority_id) %>% 
+  separate_longer_delim(cols = countryside_stewardship, delim = "; ") %>% 
+  separate_longer_delim(cols = sfi, delim = "; ") %>% 
+    mutate(cs_id = if_else(
+    check_valid_grant_string(countryside_stewardship, letters = 2),
     countryside_stewardship,
     NA_character_),
-    countryside_stewardship = NULL) %>% 
-  separate_longer_delim(cs_clean, "; ") %>% 
-  filter(!is.na(cs_clean)) %>% 
-  rename(grant_id = cs_clean) %>% 
-  add_id() %>% 
-  relocate(id, area_measure_id, grant_id)
+    countryside_stewardship = NULL,
+    sfi_id = if_else(
+      check_valid_grant_string(sfi, letters = 3),
+      sfi,
+      NA_character_),
+    sfi = NULL) %>% 
+  filter(!is.na(cs_id),
+         !is.na(sfi_id)) %>% 
+  relocate(area_measure_id, cs_id, sfi_id) %>% 
+  distinct() 
 
-areas_measures_grants_lookup_tbl %>% glimpse()
-
-priorities_areas_measures_lookup_tbl <- 
-measures_by_area_interim_tbl %>% 
-  transmute(area_id = associated_area_codes,
-         area_measure_id,
-         priority_id = as.integer(associated_priority)) %>% 
-  separate_longer_delim(cols = area_id, delim = "; ") %>% 
-  add_id() %>% 
-  mutate(area_id = as.integer(area_id)) %>% 
-  relocate(id, priority_id, area_id, area_measure_id)
-
-priorities_areas_measures_lookup_tbl %>% glimpse()
+areas_measures_grants_lookup_tbl %>% 
+  glimpse()
+# 
+# priorities_areas_measures_lookup_tbl <- 
+# measures_by_area_interim_tbl %>% 
+#   transmute(area_id = associated_area_codes,
+#          area_measure_id,
+#          priority_id = as.integer(associated_priority)) %>% 
+#   separate_longer_delim(cols = area_id, delim = "; ") %>% 
+#   add_id() %>% 
+#   mutate(area_id = as.integer(area_id)) %>% 
+#   relocate(id, priority_id, area_id, area_measure_id)
+# 
+# priorities_areas_measures_lookup_tbl %>% glimpse()
 
 # make single measures tbl
-area_measures_tbl <- measures_by_area_interim_tbl %>% 
-  select(area_measure_id,
-         measure = recommended_measures,
-         level_of_ambition,
-         land_type,
-         stakeholder)
-
-area_measures_tbl %>% glimpse()
-
-
-priorities_measures_lookup_tbl <- 
-  measures_by_priority_interim_tbl %>% 
-  select(priority_id, priority_measure_id) %>% 
-  separate_longer_delim(cols = priority_id,
-                        delim = ",") %>%
-  mutate(priority_id = as.integer(priority_id)) %>% 
-  add_id() %>% 
-  relocate(id, priority_id, priority_measure_id)
+# 
+# priorities_measures_lookup_tbl <- 
+#   measures_by_priority_interim_tbl %>% 
+#   select(priority_id, priority_measure_id) %>% 
+#   separate_longer_delim(cols = priority_id,
+#                         delim = ",") %>%
+#   mutate(priority_id = as.integer(priority_id)) %>% 
+#   add_id() %>% 
+#   relocate(id, priority_id, priority_measure_id)
   
-priorities_measures_lookup_tbl %>% glimpse()
-  
-
+# priorities_measures_lookup_tbl %>% glimpse()
 
 # Use chat GPT to get the Linnaean names https://chat.openai.com/share/086bf029-f2a7-409a-b60c-a5964015df21
 
