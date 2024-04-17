@@ -50,6 +50,7 @@ grants_single_tbl <- grants_tbl %>%
           sep = "\n",
           -grant_id)
 
+grants_single_tbl
 
 # make a table which relates areas, priorities, measures and grants
 
@@ -86,6 +87,8 @@ areas_priorities_grants_tbl <- areas_tbl %>%
 
   select(-starts_with("id")) %>% 
   distinct()
+
+areas_priorities_grants_tbl %>% glimpse()
 
 # make a table which relates species, areas and priorities ----
 # retain just the species_id and common_name from the species_tbl
