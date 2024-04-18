@@ -61,7 +61,7 @@ add_id <- function(tbl) {
     rownames_to_column("id") %>% 
     mutate(id = as.integer(id))
 }
-  
+
 check_url <- function(url) {
   tryCatch({
     # Create and perform the request
@@ -71,7 +71,7 @@ check_url <- function(url) {
     # Check the status code
     resp_status(response)
     
-
+    
   }, error = function(e) {
     0
   })
@@ -144,13 +144,13 @@ make_grants_tbl <- function(cs_tbl, sfi_tbl, cs_grant_codes_tbl){
 }
 
 parse_cs_grant_codes <- function(sheets_list){
-
-sheets_list %>% 
+  
+  sheets_list %>% 
     pluck("farming_codes") %>% 
     filter(scheme == "Countryside Stewardship") %>% 
     mutate(category = str_to_sentence(meaning),
-         meaning = NULL,
-         scheme = NULL) %>% 
+           meaning = NULL,
+           scheme = NULL) %>% 
     rename(code_prefix = code)
 }
 
@@ -384,7 +384,35 @@ make_species_tbl <- function(priority_species_tbl, gbif_tbl){
                by = join_by(species_id == verbatim_index))  
 }
 
-
+# Priorities parse functions
+parse_priorities_tbl <- function(sheets_list, areas_tbl, areas_start_col = 5) {
+  # read and process the priorities table. 
+  # amend area_count var if new areas are added
+  
+  priorities_raw_tbl <-
+    sheets_list %>% pluck("statement_of_bd_priorities")
+  
+  area_ids_vec <- areas_tbl$area_id
+  
+  nms <- c("theme",
+           "priority_id",
+           "biodiversity_priority",
+           "simplified_biodiversity_priority",
+           area_ids_vec)
+  
+  priorities_raw_tbl %>%
+    filter(x1 != "Theme") %>%
+    set_names(nms) %>%
+    mutate(across(
+      .cols = all_of(areas_start_col:last_col()),
+      ~ if_else(.x == "x", cur_column(),
+                NA_character_)
+    )) %>%
+    pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id") %>%
+    select(-name) %>%
+    filter(!is.na(area_id)) %>%
+    mutate(across(.cols = ends_with("_id"), as.integer))
+}
 
 # Ingest and shape the data ----
 
@@ -418,14 +446,14 @@ interim_areas_tbl <- parse_areas_tbl(sheets_list)
 
 # nested tbl to capture data with valid and failing urls
 
-  scheme_check_url_tbl <- interim_areas_tbl %>% 
+scheme_check_url_tbl <- interim_areas_tbl %>% 
   select(area_id, area_name, funding_schemes) %>% 
   separate_longer_delim(cols = funding_schemes, delim = "\r\n\r\n") %>% 
   filter(!is.na(funding_schemes)) %>% 
   mutate(status = map_chr(funding_schemes, linkchecker)) %>% 
   nest_by(status)
-  
-  # failed urls for introspection
+
+# failed urls for introspection
 failed_urls <- scheme_check_url_tbl %>% 
   filter(status == "httr2_http_404") %>% 
   unnest(data) %>% 
@@ -454,38 +482,9 @@ areas_tbl %>% glimpse()
 
 #     Priorities ----
 
-parse_priorities_tbl <- function(sheets_list, areas_tbl, areas_start_col = 5) {
-  # read and process the priorities table. 
-  # amend area_count var if new areas are added
-  
-  priorities_raw_tbl <-
-    sheets_list %>% pluck("statement_of_bd_priorities")
-  
-  area_ids_vec <- areas_tbl$area_id
-  
-  nms <- c("theme",
-           "priority_id",
-           "biodiversity_priority",
-           "simplified_biodiversity_priority",
-           area_ids_vec)
-  
-    priorities_raw_tbl %>%
-    filter(x1 != "Theme") %>%
-    set_names(nms) %>%
-    mutate(across(
-      .cols = all_of(areas_start_col:last_col()),
-      ~ if_else(.x == "x", cur_column(),
-                NA_character_)
-    )) %>%
-    pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id") %>%
-    select(-name) %>%
-    filter(!is.na(area_id)) %>%
-    mutate(across(.cols = ends_with("_id"), as.integer))
-}
-
 priorities_area_tbl <- parse_priorities_tbl(sheets_list,
-                                       areas_tbl,
-                                       areas_start_col = 5)
+                                            areas_tbl,
+                                            areas_start_col = 5)
 
 priorities_areas_lookup_tbl <- priorities_area_tbl %>% 
   distinct(priority_id, area_id) %>% 
@@ -574,7 +573,7 @@ priorities_tbl %>% glimpse()
 #   relocate(priority_measure_id, measure,everything())
 # 
 # priority_measures_tbl %>% glimpse()
-  
+
 
 # measures by AREA ----
 # make the measures by area table
@@ -595,7 +594,7 @@ area_measures_long_tbl <-
                      end_of_second = 65,
                      measures_n = 153 ) %>% 
   make_measures_area_tbl_1() %>% 
-    make_measures_area_tbl(areas_start_col = 13) %>% 
+  make_measures_area_tbl(areas_start_col = 13) %>% 
   make_measures_area_long_tbl(area_schemes_condensed_tbl, priorities_tbl) 
 
 areas_measures_grants_lookup_tbl <- area_measures_long_tbl %>% 
@@ -618,14 +617,16 @@ area_measures_tbl %>%
 
 # retry
 # this might be the one
-test_tbl <- area_measures_long_tbl %>%  
+# it should enable a view of measures for each area, and grants
+# for each measure
+areas_priorities_measures_grants_tbl <- area_measures_long_tbl %>%  
   left_join(grants_tbl,
             by = join_by(grant_id == grant_id)) %>% 
-  # group_by(area_measure_id, theme, priority_id, biodiversity_priority, measure, level_of_ambition, land_type, 
-  #          stakeholder, relevant_map_layer, link_to_further_guidance, area_id, scheme) %>%
-  # summarise(grant_link = paste0(url, collapse = "\n"), .groups = "drop") %>% 
   left_join(areas_tbl %>% select(area_id, area_name),
             by = join_by(area_id == area_id))
+
+areas_priorities_measures_grants_tbl %>% 
+  write_csv("data/portal_upload/areas-priorities-measures-grants-tbl.csv", na = "")
 
 
 # Test functions and generate data ----
@@ -646,7 +647,7 @@ species_priority_lookup_tbl <-
   relocate(id, priority_id, species_id)
 
 species_priority_lookup_tbl %>% glimpse()
-  
+
 species_area_lookup_tbl <- sheets_list %>% 
   pluck("species_by_area") %>% 
   slice(2:n()) %>%
@@ -665,7 +666,7 @@ species_area_lookup_tbl <- sheets_list %>%
   arrange(area_id) %>% 
   add_id() %>% 
   relocate(id, species_id, area_id)
-  
+
 # table to relate species, priorities and areas
 
 species_priority_area_tbl <- species_tbl %>% 
@@ -683,6 +684,8 @@ species_priority_area_tbl <- species_tbl %>%
   glimpse()
 # 
 # A data table to capture the relationships between species, priorities and areas. Users can filter by priority and area to see which species are important for both categories. Duplication is possible as a species may be important for both a given area and a given priority.
+
+# this is for a separate LNRS product which could show species for an LNRS focus area or priority
 
 species_priority_area_tbl %>% write_csv("data/portal_upload/species-priority-area-tbl.csv", na = "")
 
@@ -724,15 +727,15 @@ tbl_list <- list(
   "priority-measures-grants-lookup-tbl" = priority_measures_grants_lookup_tbl,
   "areas-measures-grants-lookup-tbl" = areas_measures_grants_lookup_tbl,
   "grants-tbl" = grants_tbl
-                 )
+)
 
 write_rds(tbl_list, "data/portal_tbl_list.rds")
 
 save_tbls(tbl_list, path = "data/portal_upload/")
 # print the CORE tbls
 base_tbls_list <- base::setdiff(tbl_list,
-tbl_list %>% 
-  list.match("lookup")
+                                tbl_list %>% 
+                                  list.match("lookup")
 )
 map(base_tbls_list, names)
 
