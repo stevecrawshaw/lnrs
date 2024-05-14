@@ -603,7 +603,7 @@ areas_measures_grants_lookup_tbl <- area_measures_long_tbl %>%
 # this is the table written to ods v
 
 area_measures_tbl <- area_measures_long_tbl %>% 
-  left_join(grants_tbl %>% select(grant_id, url),
+  left_join(grants_tbl %>% select(grant_id, grant_name, url),
             by = join_by(grant_id == grant_id)) %>% 
   group_by(area_measure_id, theme, priority_id, biodiversity_priority, measure, level_of_ambition, land_type, 
            stakeholder, relevant_map_layer, link_to_further_guidance, area_id, scheme) %>%
@@ -614,13 +614,15 @@ area_measures_tbl <- area_measures_long_tbl %>%
 # refactor to account for NA in grant name
 
 area_measures_new_tbl <- area_measures_long_tbl %>% 
-  left_join(grants_tbl %>% select(grant_id, url),
+  left_join(grants_tbl %>% select(grant_id, grant_name, url),
             by = join_by(grant_id == grant_id)) %>% 
   # group_by(area_measure_id, theme, priority_id, biodiversity_priority, measure, level_of_ambition, land_type, 
   #          stakeholder, relevant_map_layer, link_to_further_guidance, area_id, scheme) %>%
   #mutate(grant_link = paste0(url, collapse = "\n")) %>% 
   left_join(areas_tbl %>% select(area_id, area_name),
             by = join_by(area_id == area_id))
+
+area_measures_new_tbl %>% glimpse()
 
 area_measures_new_tbl %>%
   write_csv("data/area-measures-new-tbl.csv", na = "")
