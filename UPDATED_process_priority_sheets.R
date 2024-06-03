@@ -624,6 +624,13 @@ area_measures_new_tbl <- area_measures_long_tbl %>%
 
 area_measures_new_tbl %>% glimpse()
 
+area_measures_new_tbl %>% 
+  select(-scheme, -theme) %>%
+  filter(area_id == 44, area_measure_id == 51) %>%
+  view()
+  distinct() %>% 
+  nrow()
+
 area_measures_new_tbl %>%
   write_csv("data/area-measures-new-tbl.csv", na = "")
 
