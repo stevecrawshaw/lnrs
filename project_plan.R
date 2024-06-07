@@ -20,7 +20,7 @@ date_label <- Sys.Date() %>%
 # from monitoring framework state of nature:: project plan LOCAL
 
 lnrs_tbl <- read_xlsx('data/project_plan.xlsx',
-          sheet = 'project_plan_2')
+          sheet = 'project_plan_3')
 
 
 # Functions ----
@@ -95,7 +95,7 @@ save_gantt <- function(gantt_object, filename, date_label, width = 15, height = 
   return(path)
 }
 
-# create the output ----
+# create the output M&E ----
 clean_tbl <- make_clean_tbl(lnrs_tbl) %>% 
   filter(primary == 4)
 
@@ -113,6 +113,27 @@ save_gantt(m_and_e_gantt,
            "m_and_e",
            width = 10,
            height = 11,
+           date_label)
+
+# Overall Project Updated ----
+
+clean_tbl <- make_clean_tbl(lnrs_tbl) %>% 
+  filter(primary != 5)
+spot_tbl <- read_spot_tbl(sheetname = "project_spot_data_2")
+
+
+overall_project_gantt <- my_ganntrify(
+  clean_tbl,
+  spot_tbl,
+  title = "Open Data Portal: Project Overview",
+  caption = "")
+
+overall_project_gantt
+
+save_gantt(overall_project_gantt,
+           "overall_project_gantt",
+           width = 12,
+           height = 16,
            date_label)
 
 
