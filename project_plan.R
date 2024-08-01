@@ -132,18 +132,12 @@ overall_project_gantt
 
 save_gantt(overall_project_gantt,
            "overall_project_gantt",
-           width = 12,
+           width = 14,
            height = 16,
            date_label)
 
 
 # Output project plan
-activity_table_gt %>% 
+clean_tbl %>% 
+  make_activity_table_gt() %>%
   gtsave(glue("plots/activity_table_portal_{date_label}.png"))  
-
-
-gantt_chart
-# Save
-
-
-
