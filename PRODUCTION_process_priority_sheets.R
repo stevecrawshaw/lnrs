@@ -7,16 +7,17 @@ pacman::p_load(tidyverse,
                rgbif,
                httr2,
                rvest,
-               rlist)
+               rlist,
+               sf)
 
 # Source Data ----
-# April 2024
+# august 2024
 path = "data/Priorities and Measures Master for portal_for upload to app.xlsx"
 
 sheets_vec <-
   readxl::excel_sheets(path)
 
-sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
+#sfi_raw_tbl <- read_csv("data/sfi_raw.csv")
 
 make_list_from_sheets <- function(
     path = path,
@@ -119,24 +120,23 @@ clean_text <- function(input_string) {
 
 #    Grant functions ----
 
-make_grants_tbl <- function(cs_tbl, sfi_tbl, cs_grant_codes_tbl){
+make_grants_tbl <- function(cs_tbl,
+                            sfi_tbl,
+                            cs_grant_codes_tbl){
+  
   
   bind_rows(cs_tbl, sfi_tbl) |> 
     mutate(code_prefix = if_else(str_starts(grant_id, "[A-Z]{2}"),
                                  str_extract_all(grant_id, "[A-Z]") |> 
-                                   map_chr(~paste0(.x, collapse = "")),
-                                 "")) |> 
+                                   map_chr(~paste0(.x, collapse = "")), "")) |> 
     left_join(cs_grant_codes_tbl,
               by = join_by(code_prefix == code_prefix)) |> 
-    mutate(grant_focus = coalesce(category.x, category.y),
-           across(starts_with("category"), ~NULL),
-           code_prefix = NULL,
+    mutate(code_prefix = NULL,
            link_status = NULL) |> 
     add_id() |> 
-    relocate(grant_id, id, url, grant_name, grant_focus, grant_scheme, annual_payment) |> 
+    relocate(grant_id, id, url, grant_name, grant_scheme) |> 
     mutate(grant_summary = glue(
       "Grant name: {grant_name}\n
-     Grant focus: {grant_focus}\n
      Grant scheme: {grant_scheme}\n
      Link: <a href={url} target=_blank>{url}</a>\n
      url: {url}"))
@@ -199,25 +199,25 @@ make_cs_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
 # via chatGPT to parse into table 
 # https://chat.openai.com/c/d5c6018e-f618-4cf3-95df-f9d66fef9e65
 
-clean_sfi_tbl <- function(sfi_raw_tbl, url = "https://assets.publishing.service.gov.uk/media/661794066ad004cd0fac05ed/SFI23_handbook_v5.0.pdf"){
-  
-  if(check_url(url) != 200){
-    stop("URL not found")
-  }
-  
-  sfi_raw_tbl |> 
-    mutate(url = url,
-           grant_name = glue("{code}: {sfi_action}"),
-           grant_scheme = "Sustainable Farming Initiative",
-           grant_id = code,
-           category = str_remove(category, "Actions for ") |> 
-             str_to_sentence()
-    ) |> 
-    select(url, grant_name, grant_id,
-           grant_scheme, annual_payment,
-           category) 
-  
-}
+# clean_sfi_tbl <- function(sfi_raw_tbl, url = "https://assets.publishing.service.gov.uk/media/661794066ad004cd0fac05ed/SFI23_handbook_v5.0.pdf"){
+#   
+#   if(check_url(url) != 200){
+#     stop("URL not found")
+#   }
+#   
+#   sfi_raw_tbl |> 
+#     mutate(url = url,
+#            grant_name = glue("{code}: {sfi_action}"),
+#            grant_scheme = "Sustainable Farming Initiative",
+#            grant_id = code,
+#            category = str_remove(category, "Actions for ") |> 
+#              str_to_sentence()
+#     ) |> 
+#     select(url, grant_name, grant_id,
+#            grant_scheme, annual_payment,
+#            category) 
+#   
+# }
 
 # SFI Update 2024 ----
 # 
@@ -263,7 +263,7 @@ get_sfi_stub <- function(item){
 make_url_from_stub <- function(stub, base_url){
   # do various cleaning operations on the stub
   # and make a valid url for the grant
-  stub_reformatted <- stub |> 
+stub_reformatted <- stub |> 
     str_replace_all(pattern = ":\\s|\\s",
                     replacement = "-") |> 
     str_remove_all("\\(|\\)|,")|>
@@ -275,12 +275,12 @@ make_url_from_stub <- function(stub, base_url){
   paste0(base_url, "/", stub_reformatted)
 }
 
-grant_name <- funding_base_urls |> 
+grant_names <- funding_base_urls |> 
   map(get_sfi_vector) |> 
   map(~map_chr(.x, get_sfi_stub)) |> 
   unlist() 
 
-grant_urls <- codes_summary |> 
+grant_urls <- grant_names |> 
   map_chr(~make_url_from_stub(.x, find_funding_base_url))
   
 # lcheck <- map_chr(t, linkchecker) |> 
@@ -288,12 +288,17 @@ grant_urls <- codes_summary |>
 # 
 # t[!lcheck]
 
-sfi_funding_tbl <- tibble(grant_name, url = grant_urls) |> 
-  separate(grant_name,
+sfi_funding_tbl <- tibble(grant_names, url = grant_urls) |> 
+  separate(grant_names,
            into = c("grant_id", "summary"),
            sep = ": ",
            remove = FALSE) |> 
-  mutate(grant_scheme = "SFI") |> 
+  mutate(grant_scheme = "SFI",
+         summary_wrapped = str_wrap(summary,
+                                    whitespace_only = TRUE, 
+                                    width = 50),
+         link_status = map(url, linkchecker) |>
+           as.integer()) |> 
   glimpse()
 
 sfi_tbl <- sfi_web_tbl |> 
@@ -302,124 +307,135 @@ sfi_tbl <- sfi_web_tbl |>
   select(-c(sfi_action, annual_payment, action_s_duration)) |> 
   glimpse()
 
+# countryside stewardship and make final grants tbl
+# 
 
-#    Input parsing functions ----
+links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
 
-parse_areas_tbl <- function(sheets_list) {
-  # import and process the priority areas
-  sheets_list |>
-    pluck("areas_for_description") |>
-    rename(area_id = identifier,
-           area_name = title,
-           area_description = brief_narrative,
-           area_link = `links_to_further_info_guidance`) |>
-    mutate(
-      area_id = as.integer(area_id),
-      area_name = map_chr(area_name, ~ clean_text(.x))
-    ) |> 
-    filter(!is.na(area_id))
+cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
+                      domain = "https://www.gov.uk") |> 
+  mutate(link_status = map_int(url, check_url))
+
+# TRUE if all links good
+if(all(cs_tbl$link_status == 200)){
+  TRUE
+} else {
+  cs_tbl |> filter(link_status != 200)
 }
 
+# sfi superceded
+#sfi_tbl <- clean_sfi_tbl(sfi_raw_tbl = sfi_raw_tbl)
+
+cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
+#     Consolidate grant data ----
+
+grants_tbl <- make_grants_tbl(cs_tbl,
+                              sfi_tbl, 
+                              cs_grant_codes_tbl) |> 
+  glimpse()
+
+
+#    Input parsing functions ----
 
 # Measures table functions ----
 # measures table processing functions
 # three in all
 # first one does some renaming as the sheet names are not clean
 
-rename_dirty_sheet <- function(sheets_list,
-                               tbl = "measures_by_area",
-                               end_of_first = 13,
-                               end_of_second = 65,
-                               measures_n = 153 
-){
-  # rename the measures_by_area sheet
-  measures_by_area_interim_tbl <- sheets_list |> 
-    pluck(tbl)
-  
-  first_half_range <- 1:end_of_first
-  second_half_range <- (end_of_first + 1):end_of_second
-  
-  first_half_names <- measures_by_area_interim_tbl[1, first_half_range] |> 
-    as.character() |> 
-    make_clean_names()
-  
-  second_half_names <- measures_by_area_interim_tbl[1, second_half_range] |>
-    names() |> 
-    map_chr(~str_extract(.x, "[0-9]+")) 
-  
-  all_names <- c(first_half_names, second_half_names)  
-  
-  measures_by_area_interim_tbl[2:measures_n,] |> 
-    set_names(all_names)
-  
-}
-
-make_measures_area_tbl_1 <- function(measures_area_tbl_interim){
-  # make the first measures table
-  # take out some redundant fields and replace N/A with NA
-  measures_area_tbl_interim |>
-    rownames_to_column("area_measure_id") |> 
-    mutate(area_measure_id = as.integer(area_measure_id),
-           across(.cols = c(level_of_ambition,
-                            land_type,
-                            stakeholder,
-                            sfi,
-                            relevant_map_layer,
-                            link_to_further_guidance),
-                  ~na_if(.x, "N/A")),
-           across(.cols = c(woodland, other), ~NULL)
-    ) 
-}
-
-make_measures_area_tbl <- function(measures_area_tbl_1,
-                                   areas_start_col = 13){
-  # assign the areas to the measures turning x's in columns into 
-  # area_ids
-  # separate out the land type and stakeholder columns
-  measures_area_tbl_1 |>
-    mutate(across(
-      .cols = all_of(areas_start_col:last_col()),
-      ~ if_else(.x == "x", cur_column(),
-                NA_character_)
-    )) |>
-    pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id", names_to = NULL) |> 
-    filter(!is.na(area_id)) |> 
-    separate_longer_delim(cols = c(land_type), delim = "; ") |> 
-    separate_longer_delim(cols = stakeholder, delim = "; ") |> 
-    rename(priority_id = associated_priority_code) |> 
-    mutate(across(.cols = ends_with("_id"), as.integer))
-  
-}
-
-make_measures_area_long_tbl <- 
-  function(measures_area_tbl,
-           area_schemes_condensed_tbl,
-           priorities_tbl){
-    
-    measures_area_tbl |> 
-      separate_longer_delim(cols = countryside_stewardship, delim = "; ") |> 
-      separate_longer_delim(cols = sfi, delim = "; ") |> 
-      mutate(cs_id = if_else(
-        check_valid_grant_string(countryside_stewardship, letters = 2),
-        countryside_stewardship,
-        NA_character_),
-        countryside_stewardship = NULL,
-        sfi_id = if_else(
-          check_valid_grant_string(sfi, letters = 3),
-          sfi,
-          NA_character_),
-        sfi = NULL) |> 
-      pivot_longer(cols = c(sfi_id, cs_id),
-                   names_to = NULL,
-                   values_to = "grant_id") |> 
-      #filter(!is.na(grant_id)) |> 
-      distinct() |> 
-      left_join(area_schemes_condensed_tbl,
-                by = join_by(area_id == area_id)) |> 
-      select(-theme) |> 
-      left_join(priorities_tbl |> select(priority_id, theme),
-                by = join_by(priority_id == priority_id)) 
-  }
+# rename_dirty_sheet <- function(sheets_list,
+#                                tbl = "measures_by_area",
+#                                end_of_first = 13,
+#                                end_of_second = 65,
+#                                measures_n = 153 
+# ){
+#   # rename the measures_by_area sheet
+#   measures_by_area_interim_tbl <- sheets_list |> 
+#     pluck(tbl)
+#   
+#   first_half_range <- 1:end_of_first
+#   second_half_range <- (end_of_first + 1):end_of_second
+#   
+#   first_half_names <- measures_by_area_interim_tbl[1, first_half_range] |> 
+#     as.character() |> 
+#     make_clean_names()
+#   
+#   second_half_names <- measures_by_area_interim_tbl[1, second_half_range] |>
+#     names() |> 
+#     map_chr(~str_extract(.x, "[0-9]+")) 
+#   
+#   all_names <- c(first_half_names, second_half_names)  
+#   
+#   measures_by_area_interim_tbl[2:measures_n,] |> 
+#     set_names(all_names)
+#   
+# }
+# 
+# make_measures_area_tbl_1 <- function(measures_area_tbl_interim){
+#   # make the first measures table
+#   # take out some redundant fields and replace N/A with NA
+#   measures_area_tbl_interim |>
+#     rownames_to_column("area_measure_id") |> 
+#     mutate(area_measure_id = as.integer(area_measure_id),
+#            across(.cols = c(level_of_ambition,
+#                             land_type,
+#                             stakeholder,
+#                             sfi,
+#                             relevant_map_layer,
+#                             link_to_further_guidance),
+#                   ~na_if(.x, "N/A")),
+#            across(.cols = c(woodland, other), ~NULL)
+#     ) 
+# }
+# 
+# make_measures_area_tbl <- function(measures_area_tbl_1,
+#                                    areas_start_col = 13){
+#   # assign the areas to the measures turning x's in columns into 
+#   # area_ids
+#   # separate out the land type and stakeholder columns
+#   measures_area_tbl_1 |>
+#     mutate(across(
+#       .cols = all_of(areas_start_col:last_col()),
+#       ~ if_else(.x == "x", cur_column(),
+#                 NA_character_)
+#     )) |>
+#     pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id", names_to = NULL) |> 
+#     filter(!is.na(area_id)) |> 
+#     separate_longer_delim(cols = c(land_type), delim = "; ") |> 
+#     separate_longer_delim(cols = stakeholder, delim = "; ") |> 
+#     rename(priority_id = associated_priority_code) |> 
+#     mutate(across(.cols = ends_with("_id"), as.integer))
+#   
+# }
+# 
+# make_measures_area_long_tbl <- 
+#   function(measures_area_tbl,
+#            area_schemes_condensed_tbl,
+#            priorities_tbl){
+#     
+#     measures_area_tbl |> 
+#       separate_longer_delim(cols = countryside_stewardship, delim = "; ") |> 
+#       separate_longer_delim(cols = sfi, delim = "; ") |> 
+#       mutate(cs_id = if_else(
+#         check_valid_grant_string(countryside_stewardship, letters = 2),
+#         countryside_stewardship,
+#         NA_character_),
+#         countryside_stewardship = NULL,
+#         sfi_id = if_else(
+#           check_valid_grant_string(sfi, letters = 3),
+#           sfi,
+#           NA_character_),
+#         sfi = NULL) |> 
+#       pivot_longer(cols = c(sfi_id, cs_id),
+#                    names_to = NULL,
+#                    values_to = "grant_id") |> 
+#       #filter(!is.na(grant_id)) |> 
+#       distinct() |> 
+#       left_join(area_schemes_condensed_tbl,
+#                 by = join_by(area_id == area_id)) |> 
+#       select(-theme) |> 
+#       left_join(priorities_tbl |> select(priority_id, theme),
+#                 by = join_by(priority_id == priority_id)) 
+#   }
 
 # Species functions ----
 
@@ -467,102 +483,102 @@ make_species_tbl <- function(priority_species_tbl, gbif_tbl){
     inner_join(gbif_tbl,
                by = join_by(species_id == verbatim_index))  
 }
-
-# Priorities parse functions
-parse_priorities_tbl <- function(sheets_list, areas_tbl, areas_start_col = 5) {
-  # read and process the priorities table. 
-  # amend area_count var if new areas are added
-  
-  priorities_raw_tbl <-
-    sheets_list |> pluck("statement_of_bd_priorities")
-  
-  area_ids_vec <- areas_tbl$area_id
-  
-  nms <- c("theme",
-           "priority_id",
-           "biodiversity_priority",
-           "simplified_biodiversity_priority",
-           area_ids_vec)
-  
-  priorities_raw_tbl |>
-    filter(x1 != "Theme") 
-    set_names(nms) |>
-    mutate(across(
-      .cols = all_of(areas_start_col:last_col()),
-      ~ if_else(.x == "x", cur_column(),
-                NA_character_)
-    )) |>
-    pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id") |>
-    select(-name) |>
-    filter(!is.na(area_id)) |>
-    mutate(across(.cols = ends_with("_id"), as.integer))
-}
+# 
+# # Priorities parse functions
+# parse_priorities_tbl <- function(sheets_list, areas_tbl, areas_start_col = 5) {
+#   # read and process the priorities table. 
+#   # amend area_count var if new areas are added
+#   
+#   priorities_raw_tbl <-
+#     sheets_list |> pluck("statement_of_bd_priorities")
+#   
+#   area_ids_vec <- areas_tbl$area_id
+#   
+#   nms <- c("theme",
+#            "priority_id",
+#            "biodiversity_priority",
+#            "simplified_biodiversity_priority",
+#            area_ids_vec)
+#   
+#   priorities_raw_tbl |>
+#     filter(x1 != "Theme") 
+#     set_names(nms) |>
+#     mutate(across(
+#       .cols = all_of(areas_start_col:last_col()),
+#       ~ if_else(.x == "x", cur_column(),
+#                 NA_character_)
+#     )) |>
+#     pivot_longer(cols = all_of(areas_start_col:last_col()), values_to = "area_id") |>
+#     select(-name) |>
+#     filter(!is.na(area_id)) |>
+#     mutate(across(.cols = ends_with("_id"), as.integer))
+# }
 
 # Ingest and shape the data ----
 
-links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
-
-cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
-                      domain = "https://www.gov.uk") |> 
-  mutate(link_status = map_int(url, check_url))
-
-# TRUE if all links good
-if(all(cs_tbl$link_status == 200)){
-  TRUE
-} else {
-  cs_tbl |> filter(link_status != 200)
-}
-
-sfi_tbl <- clean_sfi_tbl(sfi_raw_tbl = sfi_raw_tbl)
-
-cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
-#     Consolidate grant data ----
-
-grants_tbl <- make_grants_tbl(cs_tbl,
-                              sfi_tbl, 
-                              cs_grant_codes_tbl) 
-
-grants_tbl |> glimpse()
 
 #     Areas and Funding Schemes ----
+#     
+
+parse_areas_tbl <- function(sheets_list) {
+  # import and process the priority areas
+  sheets_list |>
+    pluck("areas_for_description") |>
+    rename(area_id = identifier,
+           area_name = title,
+           area_description = brief_narrative,
+           area_link = `links_to_further_info_guidance`) |>
+    mutate(
+      area_id = as.integer(area_id),
+      area_name = map_chr(area_name, ~ clean_text(.x))
+    ) |> 
+    filter(!is.na(area_id))
+}
 
 interim_areas_tbl <- parse_areas_tbl(sheets_list)
 
-# nested tbl to capture data with valid and failing urls
-
-scheme_check_url_tbl <- interim_areas_tbl |> 
+area_funding_schemes_tbl <- interim_areas_tbl  |>  
   select(area_id, area_name, local_funding_schemes) |> 
-  separate_longer_delim(cols = local_funding_schemes, delim = "\r\n\r\n") |> 
+  separate_longer_delim(cols = local_funding_schemes, delim = "; ") |> 
   filter(!is.na(local_funding_schemes)) |> 
-  mutate(status = map_chr(local_funding_schemes, linkchecker)) |> 
-  nest_by(status)
-
-# failed urls for introspection
-failed_urls <- scheme_check_url_tbl |> 
-  filter(status == "httr2_http_404") |> 
-  unnest(data) |> 
-  ungroup() |> 
-  pull(local_funding_schemes)
-
-failed_urls
-
-area_funding_schemes_tbl <- scheme_check_url_tbl  |>  
-  filter(status != "httr2_http_404") |>
-  unnest(data) |>
-  ungroup() |> 
-  select(-status) |>
   add_id() |> 
-  relocate(id, area_id, area_name, local_funding_schemes)
+  relocate(id, area_id, area_name, local_funding_schemes) |> 
+  glimpse()
 
-area_funding_schemes_tbl |> glimpse()
+area_schemes_condensed_tbl <- area_funding_schemes_tbl |> 
+  group_by(area_id) |> 
+  summarise(local_funding_schemes = paste(local_funding_schemes, collapse = "\n"))
 
 area_funding_schemes_tbl |> 
-  write_csv("data/portal_upload/lnrs-area-funding-schemes-tbl.csv")
+  write_csv("data/lnrs-area-funding-schemes-tbl.csv")
 
-areas_tbl <- interim_areas_tbl |> 
-  select(-local_funding_schemes)
+areas_shape <- st_read("data/Sub-areas_PC_with river and woodland corridors_fixed/Sub-areas_PC_with river and woodland corridors_fixed.shp", promote_to_multi = FALSE) |> 
+  st_transform(crs = 4326) |> 
+  mutate(area_id = as.integer(id),
+         id = NULL,
+         name = NULL)  %>%  
+  filter(!st_is_empty(.))
+  
 
-areas_tbl |> glimpse()
+# as <- lapply(1:nrow(areas_shape), function(i) {
+#   st_cast(areas_shape[i, ], "POLYGON")
+# }) %>%
+#   do.call(rbind, .)
+
+
+areas_clean_tbl <- interim_areas_tbl |> 
+  mutate(area_link = str_replace_all(area_link, "; ", "\n")) |> 
+  select(-local_funding_schemes) |>
+  glimpse()
+
+
+areas_tbl <- areas_shape |> 
+  left_join(areas_clean_tbl, by = join_by(area_id == area_id)) |> 
+  glimpse()
+
+areas_tbl |> 
+  st_write("data/areas-grouped-tbl.geojson", append = FALSE)
+
 
 # refactor for new spreadsheet
 
@@ -598,19 +614,19 @@ measures_raw_tbl <- sheets_list |>
 
 start_col_for_areas_index <- 15
 
-area_ids_raw <- names(measures_raw_tbl)[start_col_for_areas_index:dim(measures_raw_tbl)[2]]
+(area_ids_raw <- names(measures_raw_tbl)[start_col_for_areas_index:dim(measures_raw_tbl)[2]])
 
-# a vector of area id's with underscores and trailling numbers removed
-area_ids_new <- if_else(str_detect(area_ids_raw, "_"), str_extract(area_ids_raw, "^(.*?)_"), area_ids_raw )|> str_remove_all("_")
+# a vector of area id's with underscores and trailing numbers removed
+(area_ids_new <- if_else(str_detect(area_ids_raw, "_"), str_extract(area_ids_raw, "^(.*?)_"), area_ids_raw )|> str_remove_all("_"))
 
-non_area_names_old <- measures_raw_tbl[1, 1:(start_col_for_areas_index - 1)] |> 
-  as.character()
+(non_area_names_old <- measures_raw_tbl[1, 1:(start_col_for_areas_index - 1)] |> 
+  as.character())
 
-names(measures_raw_tbl)[1:start_col_for_areas_index -1] <- non_area_names_old |> 
-  make_clean_names()
+(names(measures_raw_tbl)[1:start_col_for_areas_index -1] <- non_area_names_old |> 
+  make_clean_names())
 
-names(measures_raw_tbl)[start_col_for_areas_index:dim(measures_raw_tbl)[2]] <- area_ids_new
-
+(names(measures_raw_tbl)[start_col_for_areas_index:dim(measures_raw_tbl)[2]] <- area_ids_new
+)
 names(measures_raw_tbl)
 
 
@@ -662,89 +678,27 @@ area_measures_interim <- area_measures_raw |>
   glimpse()
 
 #
-area_measures_interim |> 
-  left_join(areas_tbl, by = join_by(area_id == area_id)) |> 
-  left_join(priorities_tbl, by = join_by(priority_id == priority_id))
-
-
-
-
-
-
-#    area funding schemes condensed ----
-
-area_schemes_condensed_tbl <- area_funding_schemes_tbl |> 
-  group_by(area_id) |> 
-  summarise(scheme = paste0(funding_schemes, collapse = "\n"))
-
-#     Make the area measures tbl for ODS ----
-
-# lets try this as an example to test filtering
-area_measures_long_tbl <- 
-  rename_dirty_sheet(sheets_list,
-                     tbl = "measures_by_area",
-                     end_of_first = 13,
-                     end_of_second = 65,
-                     measures_n = 153 ) |> 
-  make_measures_area_tbl_1() |> 
-  make_measures_area_tbl(areas_start_col = 13) |> 
-  make_measures_area_long_tbl(area_schemes_condensed_tbl, priorities_tbl) 
-
-areas_measures_grants_lookup_tbl <- area_measures_long_tbl |> 
-  distinct(area_measure_id, grant_id)
-
-# this is the table written to ods v
-
-area_measures_tbl <- area_measures_long_tbl |> 
-  left_join(grants_tbl |> select(grant_id, grant_name, url),
+area_measures_tbl <- area_measures_interim |> 
+  left_join(areas_clean_tbl, 
+            by = join_by(area_id == area_id)) |> 
+  left_join(priorities_tbl, 
+            by = join_by(priority_id == priority_id)) |> 
+  left_join(grants_tbl |> 
+              select(grant_id,
+              grant_name,
+              grant_scheme,
+              summary_wrapped,
+              url),
             by = join_by(grant_id == grant_id)) |> 
-  group_by(area_measure_id, theme, priority_id, biodiversity_priority, measure, level_of_ambition, land_type, 
-           stakeholder, relevant_map_layer, link_to_further_guidance, area_id, scheme) |>
-  summarise(grant_link = paste0(url, collapse = "\n"), .groups = "drop") |> 
-  left_join(areas_tbl |> select(area_id, area_name),
-            by = join_by(area_id == area_id)) 
-
-# refactor to account for NA in grant name
-
-area_measures_new_tbl <- area_measures_long_tbl |> 
-  left_join(grants_tbl |> select(grant_id, grant_name, url),
-            by = join_by(grant_id == grant_id)) |> 
-  # group_by(area_measure_id, theme, priority_id, biodiversity_priority, measure, level_of_ambition, land_type, 
-  #          stakeholder, relevant_map_layer, link_to_further_guidance, area_id, scheme) |>
-  #mutate(grant_link = paste0(url, collapse = "\n")) |> 
-  left_join(areas_tbl |> select(area_id, area_name),
-            by = join_by(area_id == area_id))
-
-area_measures_new_tbl |> glimpse()
-
-area_measures_new_tbl |> 
-  select(-scheme, -theme) |>
-  filter(area_id == 44, area_measure_id == 51) |>
-  view()
-  distinct() |> 
-  nrow()
-
-area_measures_new_tbl |>
-  write_csv("data/area-measures-new-tbl.csv", na = "")
-
+    left_join(area_schemes_condensed_tbl,
+            by = join_by(area_id == area_id)) |> 
+  glimpse()
 
 
 
 area_measures_tbl |>
   write_csv("data/area_measures_long_tbl.csv", na = "")
 
-# retry
-# this might be the one
-# it should enable a view of measures for each area, and grants
-# for each measure
-areas_priorities_measures_grants_tbl <- area_measures_long_tbl |>  
-  left_join(grants_tbl,
-            by = join_by(grant_id == grant_id)) |> 
-  left_join(areas_tbl |> select(area_id, area_name),
-            by = join_by(area_id == area_id))
-
-areas_priorities_measures_grants_tbl |> 
-  write_csv("data/portal_upload/areas-priorities-measures-grants-tbl.csv", na = "")
 
 
 # Test functions and generate data ----
