@@ -238,6 +238,7 @@ sfi_web_tbl <- rvest::read_html(sfi_2024_url) |>
   clean_names() |> 
   rename(grant_id = code)
 
+
 # funding source links ----
 
 find_funding_base_url <- "https://www.gov.uk/find-funding-for-land-or-farms"
@@ -557,8 +558,12 @@ areas_shape <- st_read("data/Sub-areas_PC_with river and woodland corridors_fixe
   mutate(area_id = as.integer(id),
          id = NULL,
          name = NULL)  %>%  
-  filter(!st_is_empty(.))
-  
+  filter(!st_is_empty(.)) |> 
+  st_make_valid() |> 
+  # mutate(geom_type = st_geometry_type(geometry)) |> 
+  # filter(geom_type == "POLYGON") |> 
+  glimpse()
+
 
 # as <- lapply(1:nrow(areas_shape), function(i) {
 #   st_cast(areas_shape[i, ], "POLYGON")
@@ -572,13 +577,12 @@ areas_clean_tbl <- interim_areas_tbl |>
   glimpse()
 
 
-areas_tbl <- areas_shape |> 
-  left_join(areas_clean_tbl, by = join_by(area_id == area_id)) |> 
-  glimpse()
+areas_shape |> 
+  st_write("data/areas-grouped-tbl-poly-3.geojson", 
+           append = FALSE)
 
-areas_tbl |> 
-  st_write("data/areas-grouped-tbl.geojson", append = FALSE)
-
+areas_clean_tbl |> 
+  write_csv("data/areas-tbl-csv.csv", na = "")
 
 # refactor for new spreadsheet
 
@@ -673,11 +677,13 @@ area_measures_interim <- area_measures_raw |>
            str_remove(";\\s$"),
          priority_id = as.integer(priority_id)) |> 
   select(-c(countryside_stewardship, sfi, other_funding)) |> 
-  separate_longer_delim(grant_id, delim = "; ") |> 
+  separate_longer_delim(grant_id, delim = "; ") |>
+  separate_longer_delim(stakeholder, delim = "; ") |> 
+  separate_longer_delim(measure_type, delim = "; ") |> 
   distinct() |> 
   glimpse()
 
-#
+
 area_measures_tbl <- area_measures_interim |> 
   left_join(areas_clean_tbl, 
             by = join_by(area_id == area_id)) |> 
@@ -699,7 +705,18 @@ area_measures_tbl <- area_measures_interim |>
 area_measures_tbl |>
   write_csv("data/area_measures_long_tbl.csv", na = "")
 
-
+area_measures_tbl |>
+  select(area_id,
+         area_name,
+         measure,
+         biodiversity_priority,
+         core_supplementary,
+         measure_type,
+         stakeholder,
+         grant_name,
+         grant_id,
+         url) |> 
+  write_csv("data/area-measures-condensed.csv", na = "")
 
 # Test functions and generate data ----
 
