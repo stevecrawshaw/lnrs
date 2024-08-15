@@ -125,9 +125,10 @@ rename_action_col <- function(tbl){
 
 make_grants_tbl <- function(cs_tbl,
                           sfi_tbl,
+                          ofc_clean_tbl,
                           cs_grant_codes_tbl){
 
-bind_rows(cs_tbl, sfi_tbl) |> 
+bind_rows(cs_tbl, sfi_tbl, ofc_clean_tbl) |> 
   mutate(code_prefix = if_else(str_starts(grant_id, "[A-Z]{2}"),
                                str_extract_all(grant_id, "[A-Z]") |> 
                                  map_chr(~paste0(.x, collapse = "")), "")) |> 
@@ -249,12 +250,12 @@ stub_reformatted <- stub |>
 paste0(base_url, "/", stub_reformatted)
 }
 
-grant_names <- funding_base_urls |> 
+grant_name <- funding_base_urls |> 
 map(get_sfi_vector) |> 
 map(~map_chr(.x, get_sfi_stub)) |> 
 unlist() 
 
-grant_urls <- grant_names |> 
+grant_urls <- grant_name |> 
 map_chr(~make_url_from_stub(.x, find_funding_base_url))
 
 # lcheck <- map_chr(t, linkchecker) |> 
@@ -262,8 +263,8 @@ map_chr(~make_url_from_stub(.x, find_funding_base_url))
 # 
 # t[!lcheck]
 
-sfi_funding_tbl <- tibble(grant_names, url = grant_urls) |> 
-separate(grant_names,
+sfi_funding_tbl <- tibble(grant_name, url = grant_urls) |> 
+separate(grant_name,
          into = c("grant_id", "summary"),
          sep = ": ",
          remove = FALSE) |> 
@@ -298,10 +299,21 @@ cs_tbl |> filter(link_status != 200)
 
 cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
 
+# other funding codes
+# 
+ofc_raw_tbl <- sheets_list |> 
+  pluck("other_funding_codes")
+
+ofc_clean_tbl <- ofc_raw_tbl |> 
+  transmute(grant_id = code,
+         grant_name = glue("{grant_id}: {fund_name}"),
+         url = link)
+
 #     Consolidate grant data 
 
 grants_tbl <- make_grants_tbl(cs_tbl,
                             sfi_tbl, 
+                            ofc_clean_tbl,
                             cs_grant_codes_tbl) |> 
 glimpse()
 
@@ -341,9 +353,6 @@ area_schemes_condensed_tbl <- area_funding_schemes_tbl |>
 group_by(area_id) |> 
 summarise(local_funding_schemes = paste(local_funding_schemes, collapse = "\n"))
 
-area_funding_schemes_tbl |> 
-write_csv("data/lnrs-area-funding-schemes-tbl.csv")
-
 # just the shapes and id \ name - upload to the portal as geojson
 areas_shape <- st_read("data/lnrs-sub-areas.fgb")
 
@@ -352,8 +361,8 @@ mutate(area_link = str_replace_all(area_link, "; ", "\n")) |>
 select(-local_funding_schemes) |>
 glimpse()
 
-areas_tbl |> 
-write_csv("data/lnrs-areas-tbl.csv", na = "")
+# areas_tbl |> 
+# write_csv("data/lnrs-areas-tbl.csv", na = "")
 
 # Priorities ----
 
@@ -446,17 +455,18 @@ pivot_longer(cols = starts_with("x"),
 filter(!is.na(area_id)) |> 
 select(-area_x) |> 
 mutate(across(.cols = c(countryside_stewardship, sfi, other_funding),
-              ~replace_na(.x, "")),
+              ~replace_na(.x, "xxx")),
        grant_id = paste(countryside_stewardship,
                      sfi, 
                      other_funding,
-                     sep = "; ") |>
-         str_remove(";\\s$"),
+                     sep = "; ") |> 
+         str_remove_all("; xxx|\\r|\\n"),
        priority_id = as.integer(priority_id)) |> 
 select(-c(countryside_stewardship, sfi, other_funding)) |> 
 separate_longer_delim(grant_id, delim = "; ") |>
-separate_longer_delim(stakeholder, delim = "; ") |> 
-separate_longer_delim(measure_type, delim = "; ") |> 
+separate_longer_delim(stakeholder, delim = "; ") |>
+separate_longer_delim(measure_type, delim = "; ") |>
+    mutate(grant_id = if_else(grant_id == "xxx", NA_character_, grant_id)) |> 
 distinct() 
 }
 
@@ -493,6 +503,14 @@ area_measures_tbl <- make_measures_raw_tbl(
                          priorities_tbl,
                          grants_tbl,
                          area_schemes_condensed_tbl)
+
+# check
+# 
+# area_measures_tbl |> 
+#   filter(priority_id == 4, area_id == 7) |> 
+#   group_by(measure) |> 
+#   summarise(g = paste0(grant_id, collapse = "---")) |> 
+#   view()
 
 
 measures_tbl <- make_measures_raw_tbl(
