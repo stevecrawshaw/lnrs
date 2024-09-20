@@ -317,6 +317,42 @@ grants_tbl <- make_grants_tbl(cs_tbl,
                             cs_grant_codes_tbl) |> 
 glimpse()
 
+# Habitat Creation and Restoration ----
+# 
+parse_hab_sheet <- function(sheets_list, sheet_name){
+
+  # read and process the habitat creation and restoration sheets
+  # relate the area_ids to the habitat types and return a tidy table
+  # with the habitat types condensed into a single column
+  out_tbl <- sheets_list |> 
+  pluck(sheet_name) |> 
+  mutate(across(
+    .cols = all_of(2:last_col()),
+    ~ if_else(
+      .x %in% c("x", "X"),
+      str_remove(cur_column(), "x") |>
+        as.integer(),
+      NA_integer_))) |> 
+  filter(identifier != "Habitat") |> 
+    pivot_longer(cols = -identifier,
+                 names_to = "col",
+                 values_to = "area_id") |>
+    filter(!is.na(area_id)) |>
+    select(-col) |>
+    group_by(area_id) |>
+    summarise(habitat = paste(identifier, collapse = ":\n")) |>
+    arrange(area_id)
+  names(out_tbl)[names(out_tbl) =="habitat"] <- sheet_name
+  out_tbl
+
+}
+
+hab_creation_tbl <- parse_hab_sheet(sheets_list, "bng_hab_creation") |> 
+  glimpse()
+
+hab_mgt_tbl <- parse_hab_sheet(sheets_list, "bng_hab_mgt") |> 
+  glimpse()
+
 # Areas ----
 
 parse_areas_tbl <- function(sheets_list) {
@@ -359,7 +395,12 @@ areas_shape <- st_read("data/lnrs-sub-areas.fgb")
 areas_tbl <- interim_areas_tbl |> 
 mutate(area_link = str_replace_all(area_link, "; ", "\n")) |> 
 select(-local_funding_schemes) |>
+left_join(hab_mgt_tbl,
+          by = join_by(area_id == area_id)) |>
+  left_join(hab_creation_tbl,
+          by = join_by(area_id == area_id)) |>
 glimpse()
+
 
 # areas_tbl |> 
 # write_csv("data/lnrs-areas-tbl.csv", na = "")
