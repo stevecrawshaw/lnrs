@@ -4,7 +4,8 @@ pacman::p_load(tidyverse,
                httr2,
                magick,
                jsonlite,
-               fs)
+               fs,
+               fuzzyjoin)
 
 # Get the species data
 
@@ -15,6 +16,10 @@ geometry <- "POLYGON((-3.01846 51.16792,-2.60807 51.15443,-2.38747 51.21087,-2.3
 
 # whole of UK
 geometry_uk <- "POLYGON((-7.15859 56.32607,-5.63629 54.95911,-5.10815 54.05816,-5.79163 52.00773,-6.1955 49.49128,-1.84609 50.2369,1.07423 50.45437,2.13051 51.60385,2.47225 53.21935,-0.6966 55.36299,-1.78396 56.57461,-1.34901 57.94157,-2.28103 58.50078,-2.5917 59.68133,-5.04601 59.55706,-8.33914 57.7241,-7.9042 56.66781,-7.15859 56.32607))"
+
+# Europe
+# 
+geometry_eu <- "POLYGON((-14.5671 53.18524,-16.93829 47.49439,-3.77818 34.68996,26.21737 35.63844,45.89824 49.15422,43.52705 71.56196,28.94424 75.47443,-14.5671 53.18524))"
 
 # example gallery url
 ex_url <- "https://www.gbif.org/occurrence/gallery?taxon_key=1912325&geometry=POLYGON((-3.01846%2051.16792,-2.60807%2051.15443,-2.38747%2051.21087,-2.33974%2051.24099,-2.24426%2051.30356,-2.35267%2051.47827,-2.3553%2051.63261,-2.57787%2051.6515,-2.93306%2051.44899,-3.07172%2051.31774,-3.01846%2051.16792))"
@@ -122,6 +127,8 @@ species_folders <- fs::dir_info(species_top_folder)
 empty_folders <- species_folders |> 
   filter(blocks == 0) |> 
   pull(path)
+
+empty_folders
 # extract taxon keys for where we want images outside weca area
 uk_taxon_keys <- empty_folders |> 
   as.character() |> 
@@ -129,6 +136,11 @@ uk_taxon_keys <- empty_folders |>
   as.integer()
 
 uk_taxon_keys
+
+species_missing <- empty_folders |> 
+  as.character() |> 
+  str_remove("data/species_images/")
+species_missing
 
 # get the images
 uk_media_list <- map(uk_taxon_keys,
@@ -141,4 +153,42 @@ uk_file_media_tbl <- uk_media_list |>
   make_media_tbl() |> 
   make_file_tbl() |> 
   dl_files()
+
+needed_tbl <- c("A lepiota", "Barbastelle", "Bechstein's", "Big Blue Pinkgill", "Blushing waxcap", "Bristol Whitebeam", "(Chalkhill Blue)", "Common Dormouse", "(European Eel)", "European Beaver", "Gadwall", "(Grayling)", "(Hedgehog)", "(lapwing)", "Lesser Horseshoe Bat", "Mistletoe Marble", "Shoveler", "(olive Earthtongue)", "(Redshank)", "Round leaved whitebeam", "Satan's Bolete", "Service tree", "(Shelduck)", "Silky Wave", "Small Blue", "(Swallow)", "(Swift)", "(Water Vole)", "Western Wood Vase Hoverfly", "(White clawed Crayfish)", "Wilmott's whitebeam") |> 
+  make_clean_names() |> 
+  enframe()
+
+missing_tbl <- species_tbl |> 
+  select(usage_key, common_name) |> 
+  mutate(match_name = make_clean_names(common_name)) |> 
+  stringdist_join(
+    needed_tbl,
+    by = join_by(match_name == value),
+    mode = 'inner',
+    method = 'lv',
+    max_dist = 3,
+    ignore_case = TRUE,
+    distance_col = 'distance') |> 
+
+  glimpse()
+
+missing_taxonkeys_manual <- c(2432582L, 2432427L, 2481714L, 2498089L, 2481714L)
+
+missing_taxonkeys_matched <- missing_tbl$usage_key |> as.integer()
+
+missing_taxon_keys <- c(missing_taxonkeys_matched, missing_taxonkeys_manual) |> as.character()
+
+
+eu_media_list <- map(missing_taxon_keys,
+                     ~get_media(.x,
+                                geometry = geometry_eu,
+                                limit = 30)) |> 
+  set_names(missing_taxon_keys)
+
+eu_file_media_tbl <- eu_media_list |> 
+  make_media_tbl() |> 
+  make_file_tbl() |> 
+  dl_files()
+
+
 

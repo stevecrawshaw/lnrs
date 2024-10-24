@@ -578,8 +578,6 @@ measures_tbl <- make_measures_raw_tbl(
 make_priority_species_tbl <- function(sheets_list){
   sheets_list |> 
     pluck("priority_species") |> 
-    rownames_to_column(var = "species_id") |> 
-    mutate(species_id = as.integer(species_id)) |> 
     rename(linnaean_name = linnaean)
 }
 
@@ -644,6 +642,7 @@ mutate(across(
             NA_character_))) |> 
 rename(species_id = x1,
        species = identifier) |> 
+filter(!is.na(species_id)) |>
 pivot_longer(cols = -c(species_id, species)) |> 
 mutate(area_id = str_sub(value, 2, 3) |>
          str_remove("_") |> 
