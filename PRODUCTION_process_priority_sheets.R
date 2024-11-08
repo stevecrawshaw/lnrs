@@ -167,33 +167,33 @@ return(c(base_url, pages_url))
 }
 
 get_links <- function(url){
-# Read the HTML content of the page
-page <- read_html(url)
-# Find all link nodes
-link_nodes <- html_nodes(page, "a")
-# output a tibble
-tibble(
-  text = html_text(link_nodes),
-  url = html_attr(link_nodes, "href"))
+  # Read the HTML content of the page
+  page <- read_html(url)
+  # Find all link nodes
+  link_nodes <- html_nodes(page, "a")
+  # output a tibble
+  tibble(
+    text = html_text(link_nodes),
+    url = html_attr(link_nodes, "href"))
 }
 
 make_links_raw_tbl <- function(make_url_vec, get_links){
-make_url_vec() |> 
-  map(get_links) |> 
-  bind_rows()
+  make_url_vec() |> 
+    map(get_links) |> 
+    bind_rows()
 }
 
 make_cs_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
-# clean and wrangle the links to get just the guidance links
-links_raw_tbl |> 
-  mutate(grant_name = str_trim(text, side = "both")) |> 
-  # need to filter for 2 cap letters, numbers colon **and** 2 cap letters, numbers, space
-  filter(str_detect(grant_name, pattern = "^[A-Z]{2}\\d{0,2}:|^[A-Z]{2}\\d{0,2}\\s")) |> 
-  mutate(url = glue("{domain}{url}"), 
-         text = NULL,
-         grant_id = str_extract(grant_name, "^[^:]+") |> 
-           str_extract("^\\w+"),
-         grant_scheme = "Countryside Stewardship")
+  # clean and wrangle the links to get just the guidance links
+  links_raw_tbl |> 
+    mutate(grant_name = str_trim(text, side = "both")) |> 
+    # need to filter for 2 cap letters, numbers colon **and** 2 cap letters, numbers, space
+    filter(str_detect(grant_name, pattern = "^[A-Z]{2}\\d{0,2}:|^[A-Z]{2}\\d{0,2}\\s")) |> 
+    mutate(url = glue("{domain}{url}"), 
+           text = NULL,
+           grant_id = str_extract(grant_name, "^[^:]+") |> 
+             str_extract("^\\w+"),
+           grant_scheme = "Countryside Stewardship")
 # flipping missing colon BC3 BC4
 }
 
@@ -610,18 +610,21 @@ get_gbif_tbl <- function(priority_species_tbl){
 
 make_species_tbl <- function(priority_species_tbl, gbif_tbl){
   priority_species_tbl |> 
-    select(-relevant_priorities, -link_to_further_guidance, -linnaean_name) |> 
+    select(-relevant_priorities, -link_to_further_guidance) |> 
     rename(common_name = species) |> 
     inner_join(gbif_tbl,
-               by = join_by(species_id == verbatim_index))  
+               by = join_by(linnaean_name == canonical_name))  
 }
 
-species_tbl <- make_species_tbl(
-  make_priority_species_tbl(sheets_list),
-  get_gbif_tbl(make_priority_species_tbl(sheets_list)))
-
-
 priority_species_tbl <- make_priority_species_tbl(sheets_list)
+
+gbif_tbl <- get_gbif_tbl(priority_species_tbl)
+
+
+species_tbl <- make_species_tbl(priority_species_tbl, gbif_tbl) 
+
+
+
 
 species_priority_lookup_tbl <- 
 priority_species_tbl |> 
