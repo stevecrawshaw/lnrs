@@ -574,6 +574,26 @@ measures_tbl <- make_measures_raw_tbl(
   
 
 # Species ----
+# 
+# Images
+
+species_image_raw_tbl <- read_csv("data/images_out_dash_tbl.csv") |> select(usage_key,
+         image_url = URLs) |> 
+  mutate(usage_key = as.integer(usage_key)) 
+
+species_image_metadata_tbl <- read_csv("data/portal_upload/images_out_tbl.csv") |> 
+  select(-c(
+    amended_file_name,
+    full_file_path
+  )) |> 
+    mutate(usage_key = as.integer(usage_key)) |>
+  glimpse()
+
+species_image_tbl <- species_image_raw_tbl |> 
+  inner_join(species_image_metadata_tbl,
+             by = join_by(usage_key == usage_key)) |> glimpse()
+  
+
 
 make_priority_species_tbl <- function(sheets_list){
   sheets_list |> 
@@ -608,12 +628,18 @@ get_gbif_tbl <- function(priority_species_tbl){
   }
 }
 
-make_species_tbl <- function(priority_species_tbl, gbif_tbl){
+make_species_tbl <- function(priority_species_tbl, gbif_tbl, species_image_tbl){
   priority_species_tbl |> 
     select(-relevant_priorities, -link_to_further_guidance) |> 
     rename(common_name = species) |> 
     inner_join(gbif_tbl,
-               by = join_by(linnaean_name == canonical_name))  
+               by = join_by(linnaean_name == canonical_name)) |> 
+    left_join(species_image_tbl |> 
+                select(usage_key,
+                       image_url,
+                       license,
+                       attribution),
+              by = join_by(usage_key == usage_key))
 }
 
 priority_species_tbl <- make_priority_species_tbl(sheets_list)
@@ -621,9 +647,8 @@ priority_species_tbl <- make_priority_species_tbl(sheets_list)
 gbif_tbl <- get_gbif_tbl(priority_species_tbl)
 
 
-species_tbl <- make_species_tbl(priority_species_tbl, gbif_tbl) 
-
-
+species_tbl <- make_species_tbl(priority_species_tbl, gbif_tbl, species_image_tbl) |> 
+  glimpse()
 
 
 species_priority_lookup_tbl <- 
@@ -664,7 +689,10 @@ species_area_tbl <- species_area_lookup_tbl |>
               select(species_id,
                      common_name,
                      scientific_name,
-                     gbif_species_url),
+                     gbif_species_url,
+                     image_url,
+                     license,
+                     attribution),
             by = join_by(species_id == species_id)) |> 
   glimpse()
 

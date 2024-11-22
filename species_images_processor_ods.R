@@ -46,7 +46,7 @@ images_out_tbl <- images_raw_tbl |>
     file_name,
     ~str_replace_all(.x,
                      c("_B" = "__B",
-                       "(?<!_)_by" = "__by__"))),
+                       "(?<!_)_by " = "__by__"))),
     final_file_name = map_chr(
       amended_file_name,
       ~str_replace_all(.x,
@@ -59,7 +59,7 @@ images_out_tbl <- images_raw_tbl |>
          attribution = map_chr(final_file_name,
                               ~str_split_i(.x,
                                            pattern = "__",
-                                           3) |> str_remove("\\.jpg")),
+                                           3) |> str_remove("\\.jpg|\\.png")),
          full_file_path = glue("{full_path}/{file_name}"),
          write_path_full = glue("{image_upload_path}/{usage_key}__{final_file_name}"),
          write_path_thumbnail = glue("{image_upload_path}/{usage_key}__thumbnail__{final_file_name}")
@@ -73,3 +73,5 @@ images_out_tbl |>
 images_out_tbl |>
   pull(write_path_full, write_path_thumbnail) |>
   iwalk(resize_write)
+
+images_out_tbl |> write_csv(fs::path("data", "portal_upload", "images_out_tbl.csv"))
