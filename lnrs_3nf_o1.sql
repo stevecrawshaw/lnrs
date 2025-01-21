@@ -1,9 +1,9 @@
 -- bash
+-- https://www.perplexity.ai/search/system-you-are-an-advanced-ana-FmQBBisrSx._7unn8VwhmQ
 duckdb
-
 ATTACH 'data/lnrs_3nf_o1.duckdb' AS lnrs;
-INSTALL HTTPFS;
-LOAD HTTPFS;
+--INSTALL HTTPFS;
+-- LOAD HTTPFS;
 
 USE lnrs;
 
@@ -27,7 +27,7 @@ CREATE OR REPLACE TABLE measure (
 ------------------------------------------------------------------
 -- 2) MEASURE_TYPE
 ------------------------------------------------------------------
-CREATE SEQUENCE seq_measure_type_id START 1;
+CREATE OR REPLACE SEQUENCE seq_measure_type_id START 1;
 
 CREATE OR REPLACE TABLE measure_type (
     measure_type_id INTEGER NOT NULL PRIMARY KEY DEFAULT nextval('seq_measure_type_id'),
@@ -37,10 +37,10 @@ CREATE OR REPLACE TABLE measure_type (
 ------------------------------------------------------------------
 -- 3) STAKEHOLDER
 ------------------------------------------------------------------
-CREATE SEQUENCE seq_stakeholder_id START 1;
+CREATE OR REPLACE SEQUENCE seq_stakeholder_id START 1;
 
 CREATE OR REPLACE TABLE stakeholder (
-    stakeholder_id INTEGER NOT NULL PRIMARY KEY,
+    stakeholder_id INTEGER NOT NULL PRIMARY KEY DEFAULT nextval('seq_stakeholder_id'),
     stakeholder    VARCHAR
 );
 
@@ -178,15 +178,39 @@ FROM area;
 
 -- measure types
 
-INSERT INTO measure_type VALUES (
-    nextval('seq_measure_type_id'), 
+INSERT INTO measure_type BY NAME 
     (SELECT DISTINCT
     measure_type
-FROM source_table)
-);
+FROM source_table);
     
+FROM measure_type;
+
+-- stakeholder insert
+
+INSERT INTO stakeholder BY NAME
+    (SELECT DISTINCT
+    stakeholder
+FROM source_table);
+
+FROM stakeholder;
 
 
+-- has measure type insert
+
+INSERT INTO measure_has_type (
+SELECT DISTINCT st.measure_id, mt.measure_type_id
+FROM source_table st
+INNER JOIN measure_type mt
+ON st.measure_type = mt.measure_type);
+
+-- measure has stakeholder insert
+INSERT INTO measure_has_stakeholder(
+SELECT DISTINCT st.measure_id, sh.stakeholder_id
+FROM source_table st
+INNER JOIN stakeholder sh
+ON st.stakeholder = sh.stakeholder);
+
+FROM measure_has_stakeholder;
 
 -- priority insert
 
