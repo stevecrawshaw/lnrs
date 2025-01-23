@@ -20,13 +20,7 @@ CREATE OR REPLACE TABLE source_table AS
 SELECT * 
 FROM read_parquet('data/area-measures-tbl.parquet');
 
-
-SELECT DISTINCT measure 
-FROM source_table
-WHERE measure LIKE '%colonisation%';
-
-
-
+--            CREATE TABLES                                     --
 ------------------------------------------------------------------
 -- 1) MEASURE
 ------------------------------------------------------------------
@@ -145,7 +139,9 @@ CREATE OR REPLACE TABLE measure_area_priority_grant (
 
 
 .tables
--- Step 3: Query source_table to Populate the Component Tables
+----------------------------------------------------------------------------
+--                   INSERT STATEMENTS                                    --
+----------------------------------------------------------------------------
 
 -- 1) Insert into measure
 
@@ -169,7 +165,6 @@ SELECT DISTINCT
 FROM source_table
 WHERE measure_id IS NOT NULL;
 
-
 -- area insert
 
 INSERT INTO area (
@@ -192,8 +187,6 @@ SELECT DISTINCT
 FROM source_table
 WHERE area_id IS NOT NULL;
 
-DESCRIBE FROM area;
-
 -- priority insert
 
 INSERT INTO priority (
@@ -209,8 +202,6 @@ SELECT DISTINCT
     theme
 FROM source_table
 WHERE priority_id IS NOT NULL;
-
-DESCRIBE FROM priority;
 
 -- grant insert
 
@@ -230,8 +221,6 @@ SELECT DISTINCT
 FROM source_table
 WHERE grant_id IS NOT NULL;
 
-
-
 -- measure types
 
 INSERT INTO measure_type BY NAME 
@@ -239,8 +228,6 @@ INSERT INTO measure_type BY NAME
     measure_type
 FROM source_table);
     
-FROM measure_type;
-
 -- stakeholder insert
 
 INSERT INTO stakeholder BY NAME
@@ -249,7 +236,6 @@ INSERT INTO stakeholder BY NAME
 FROM source_table);
 
 FROM stakeholder;
-
 
 -- has measure type insert
 
@@ -265,10 +251,8 @@ JOIN measure_type mt
 WHERE s.measure_id IS NOT NULL
   AND s.measure_type IS NOT NULL;
 
-FROM measure_has_type;
-
-
 -- measure has stakeholder insert
+
 INSERT INTO measure_has_stakeholder (measure_id, stakeholder_id)
 SELECT DISTINCT
     s.measure_id,
@@ -281,10 +265,10 @@ JOIN stakeholder stkh
 WHERE s.measure_id IS NOT NULL
   AND s.stakeholder IS NOT NULL;
 
-FROM measure_has_stakeholder;
-
 -- measure_area_priority insert
--- Each row in source_table links a specific (measure_id, area_id, priority_id). We capture it here, ignoring duplicates:
+
+-- Each row in source_table links a specific 
+-- (measure_id, area_id, priority_id). We capture it here, ignoring duplicates:
 
 INSERT INTO measure_area_priority (
     measure_id,
@@ -299,8 +283,6 @@ FROM source_table
 WHERE measure_id IS NOT NULL
   AND area_id IS NOT NULL
   AND priority_id IS NOT NULL;
-
-FROM measure_area_priority;
 
 -- 6) Insert into measure_area_priority_grant (bridge for grants)
 -- Some measure–area–priority combos have an associated grant_id. Insert them here:
@@ -322,8 +304,7 @@ WHERE measure_id IS NOT NULL
   AND priority_id IS NOT NULL
   AND grant_id IS NOT NULL;
 
-FROM measure_area_priority_grant;
--- Step 4: Recreate source_table with a Single SQL Query
+-- Recreate source_table with a Single SQL Query
 -- If you wish to see all of the columns in a single result set (mirroring source_table), 
 -- you can do so with the following join query. 
 -- The many-to-many relationship to grants is handled by left-joining on the 
@@ -397,11 +378,6 @@ LEFT JOIN grant_table AS g
        ON mag.grant_id = g.grant_id;
 
 
-
-DESCRIBE FROM source_table_recreated_vw;
-
-.mode duckbox
-
 DESCRIBE FROM source_table;
 
 -- testing why there are fewer rows in the recreated table
@@ -437,12 +413,8 @@ UNION ALL
     EXCEPT
     SELECT * FROM source_table_distinct_vw); 
 
--- Now we need a process to update (edit) the values in the individual tables
--- and then update the source_table_recreated view
-
-.tables
-
-.mode duckbox
+-- a revised version of the area-measures-tbl which keeps only the fields
+-- necessary for the app
 
 CREATE OR REPLACE VIEW apmg_slim_vw AS
 SELECT
@@ -460,14 +432,12 @@ SELECT
     , "url"
 FROM source_table_recreated_vw;
 
-SELECT DISTINCT measure 
-FROM apmg_slim_vw
-WHERE measure LIKE '%colonisation%';
-
 
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters
 COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
 
+-- Now we need a process to update (edit) the values in the individual tables
+-- and then update the source_table_recreated view
 
 .help
 
