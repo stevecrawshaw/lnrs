@@ -545,6 +545,8 @@ area_measures_tbl <- make_measures_raw_tbl(
                          grants_tbl,
                          area_schemes_condensed_tbl)
 
+
+
 # check
 # 
 # area_measures_tbl |> 

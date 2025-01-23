@@ -1,5 +1,10 @@
 -- bash
 -- https://www.perplexity.ai/search/system-you-are-an-advanced-ana-FmQBBisrSx._7unn8VwhmQ
+-- break down the big table into smaller tables into 3NF
+-- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
+-- and recreate
+
+
 rm data/lnrs_3nf_o1.duckdb
 
 duckdb
@@ -9,9 +14,18 @@ ATTACH 'data/lnrs_3nf_o1.duckdb' AS lnrs;
 
 USE lnrs;
 
+.tables
+
 CREATE OR REPLACE TABLE source_table AS
 SELECT * 
 FROM read_parquet('data/area-measures-tbl.parquet');
+
+
+SELECT DISTINCT measure 
+FROM source_table
+WHERE measure LIKE '%colonisation%';
+
+
 
 ------------------------------------------------------------------
 -- 1) MEASURE
@@ -382,7 +396,9 @@ LEFT JOIN measure_area_priority_grant AS mag
 LEFT JOIN grant_table AS g
        ON mag.grant_id = g.grant_id;
 
-DESCRIBE FROM source_table_recreated;
+
+
+DESCRIBE FROM source_table_recreated_vw;
 
 .mode duckbox
 
@@ -394,8 +410,9 @@ DESCRIBE FROM source_table;
 -- is NULL but all other  unique identifiers exist
 
 -- needs to be tested in the TEST app
+-- also lets try removing all unused fields from the dataset as it is only used for the app
 
-CREATE OR REPLACE VIEW source_table_distinct AS
+CREATE OR REPLACE VIEW source_table_distinct_vw AS
 SELECT measure_id, priority_id, grant_id, measure_type, stakeholder 
 FROM source_table st
 -- INNER JOIN source_table_recreated str
@@ -403,27 +420,55 @@ FROM source_table st
 WHERE st.area_id = 15;
 
 
-CREATE OR REPLACE VIEW source_table_recreated_distinct AS
+CREATE OR REPLACE VIEW source_table_recreated_distinct_vw AS
 SELECT measure_id, priority_id, grant_id, measure_type, stakeholder 
 FROM source_table_recreated_vw str
 -- INNER JOIN source_table_recreated str
 -- USING (measure_id, priority_id, area_id)
 WHERE str.area_id = 15;
 
-SELECT * FROM source_table_distinct;
+SELECT * FROM source_table_distinct_vw;
 
-(   SELECT * FROM source_table_distinct
+(   SELECT * FROM source_table_distinct_vw
     EXCEPT
-    SELECT * FROM source_table_recreated_distinct)  
+    SELECT * FROM source_table_recreated_distinct_vw)  
 UNION ALL
-(   SELECT * FROM source_table_recreated_distinct
+(   SELECT * FROM source_table_recreated_distinct_vw
     EXCEPT
-    SELECT * FROM source_table_distinct); 
+    SELECT * FROM source_table_distinct_vw); 
 
 -- Now we need a process to update (edit) the values in the individual tables
 -- and then update the source_table_recreated view
 
-
 .tables
+
+.mode duckbox
+
+CREATE OR REPLACE VIEW apmg_slim_vw AS
+SELECT
+    core_supplementary
+    , measure_type
+    , stakeholder
+    , area_name
+    , grant_id
+    , priority_id
+    , biodiversity_priority
+    , measure
+    , measure_id
+    , link_to_further_guidance
+    , grant_name
+    , "url"
+FROM source_table_recreated_vw;
+
+SELECT DISTINCT measure 
+FROM apmg_slim_vw
+WHERE measure LIKE '%colonisation%';
+
+
+-- try JSON as CSV is outputting invalid encoding of non alphanumeric characters
+COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
+
+
+.help
 
 .quit
