@@ -347,6 +347,7 @@ parse_hab_sheet <- function(sheets_list, sheet_name){
 
 }
 
+# 67 values as Avon Gorge has no habitat creation or management
 hab_creation_tbl <- parse_hab_sheet(sheets_list, "bng_hab_creation") |> 
   glimpse()
 
@@ -370,7 +371,11 @@ sheets_list |>
   filter(!is.na(area_id))
 }
 
-interim_areas_tbl <- parse_areas_tbl(sheets_list)
+interim_areas_tbl <- parse_areas_tbl(sheets_list) |> 
+  # remove trailing newlines
+  mutate(across(.cols = c(area_link, local_funding_schemes),
+                ~str_remove_all(.x, "\\r|\\n")))
+
 
 make_area_funding_schemes_tbl <- function(interim_areas_tbl){
 
@@ -383,7 +388,8 @@ add_id() |>
 relocate(id, area_id, area_name, local_funding_schemes)
 }
 
-area_funding_schemes_tbl <- make_area_funding_schemes_tbl(interim_areas_tbl)
+area_funding_schemes_tbl <- make_area_funding_schemes_tbl(interim_areas_tbl) 
+
 
 area_schemes_condensed_tbl <- area_funding_schemes_tbl |> 
 group_by(area_id) |> 
@@ -458,6 +464,8 @@ measures_raw_tbl |>
   filter(!is.na(associated_priority_code))
 }
 
+
+
 make_area_measures_raw_tbl <- function(measures_raw_tbl){
 
 measures_raw_tbl |> 
@@ -474,9 +482,11 @@ mutate(across(starts_with("x"),
                 as.integer())) 
 }
 
-make_area_measures_interim_tbl <- function(area_measures_raw_tbl){
 
-area_measures_raw_tbl |> 
+
+make_area_measures_interim_tbl <- function(area_measures_raw_tbl){
+#browser()
+long_tbl <- area_measures_raw_tbl |> 
 select(measure_id, starts_with("x"),
        priority_id,
        measure,
@@ -492,8 +502,12 @@ select(measure_id, starts_with("x"),
        other_funding) |> 
 pivot_longer(cols = starts_with("x"),
              names_to = "area_x",
-             values_to = "area_id") |> 
-filter(!is.na(area_id)) |> 
+             values_to = "area_id")
+
+filtered_long_tbl <- long_tbl |> 
+filter(!is.na(area_id))
+
+grant_cleaned_tbl <- filtered_long_tbl |> 
 select(-area_x) |> 
 mutate(across(.cols = c(countryside_stewardship, sfi, other_funding),
               ~replace_na(.x, "xxx")),
@@ -503,13 +517,31 @@ mutate(across(.cols = c(countryside_stewardship, sfi, other_funding),
                      sep = "; ") |> 
          str_remove_all("; xxx|\\r|\\n"),
        priority_id = as.integer(priority_id)) |> 
-select(-c(countryside_stewardship, sfi, other_funding)) |> 
+select(-c(countryside_stewardship, sfi, other_funding))
+
+sep_longer_tbl <- grant_cleaned_tbl |> 
 separate_longer_delim(grant_id, delim = "; ") |>
 separate_longer_delim(stakeholder, delim = "; ") |>
-separate_longer_delim(measure_type, delim = "; ") |>
-    mutate(grant_id = if_else(grant_id == "xxx", NA_character_, grant_id)) |> 
-distinct() 
+separate_longer_delim(measure_type, delim = "; ")
+
+final_grant_cleaned_tbl <- sep_longer_tbl |>
+  mutate(grant_id = if_else(grant_id == "xxx",
+                              NA_character_,
+                              grant_id)) |> 
+  distinct() 
+
+final_grant_cleaned_tbl
+
 }
+
+# make_measures_raw_tbl(
+#   sheets_list,
+#   measures_sheet_name = "measures_by_area",
+#   start_col_for_areas_index = 15) |> 
+#   make_area_measures_raw_tbl() |> 
+#   make_area_measures_interim_tbl() |>
+#   #distinct(measure_id) |> 
+#   view()
 
 make_area_measures_tbl <- function(area_measures_interim_tbl,
                                    areas_tbl,
@@ -545,17 +577,6 @@ area_measures_tbl <- make_measures_raw_tbl(
                          grants_tbl,
                          area_schemes_condensed_tbl)
 
-
-
-# check
-# 
-# area_measures_tbl |> 
-#   filter(priority_id == 4, area_id == 7) |> 
-#   group_by(measure) |> 
-#   summarise(g = paste0(grant_id, collapse = "---")) |> 
-#   view()
-
-
 measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
@@ -573,7 +594,14 @@ measures_tbl <- make_measures_raw_tbl(
          priority_id = as.integer(priority_id)
          ) |> 
   glimpse()
-  
+
+# identify discrepancy between area_measures_tbl and measures_tbl
+# measures_tbl|> 
+#   anti_join(area_measures_tbl |> 
+#               select(measure_id) |> 
+#               distinct(),
+#             by = join_by(measure_id == measure_id)) |> 
+#   view()
 
 # Species ----
 # 
