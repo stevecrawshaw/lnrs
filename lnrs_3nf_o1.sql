@@ -304,7 +304,7 @@ WHERE measure_id IS NOT NULL
   AND priority_id IS NOT NULL
   AND grant_id IS NOT NULL;
 
--- Recreate source_table with a Single SQL Query
+-- Recreate source_table with a Single  Query
 -- If you wish to see all of the columns in a single result set (mirroring source_table), 
 -- you can do so with the following join query. 
 -- The many-to-many relationship to grants is handled by left-joining on the 
@@ -438,6 +438,124 @@ COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
 
 -- Now we need a process to update (edit) the values in the individual tables
 -- and then update the source_table_recreated view
+
+----------------------------------------------------------------
+-- CRUD OPEARATION ON THE TABLES
+----------------------------------------------------------------
+
+-- 1. Update Operations
+-- a. Update a record in the "measure" table
+UPDATE measure
+SET measure = 'New Measure Description'
+WHERE measure_id = 1;
+
+-- b. Update a record in the "measure_type" table
+
+UPDATE measure_type
+SET measure_type = 'New Type'
+WHERE measure_type_id = 1;
+
+
+-- c. Update a record in the "stakeholder" table
+
+UPDATE stakeholder
+SET stakeholder = 'New Stakeholder Name'
+WHERE stakeholder_id = 1;
+-- d. Update a record in the "grant_table" table
+
+UPDATE grant_table
+SET grant_name = 'New Grant Name'
+WHERE grant_id = 'GRANT123';
+-- e. Update a record in the "priority" table
+
+UPDATE priority
+SET biodiversity_priority = 'New Priority'
+WHERE priority_id = 1;
+-- f. Update a record in the "area" table
+
+UPDATE area
+SET area_name = 'New Area Name'
+WHERE area_id = 1;
+-- 2. Create Operations
+-- a. Add a record to the "measure" table
+
+-- generate a new incrnemnted measure_id
+CREATE MACRO max_meas() AS (SELECT MAX(measure_id) + 1 as max_measure_id FROM measure);
+SELECT max_meas();
+
+INSERT INTO measure (measure_id, measure, other_priorities_delivered, core_supplementary, mapped_unmapped, relevant_map_layer, link_to_further_guidance)
+VALUES (max_meas(), 'New Measure', 'Priority A', 'Core', 'Mapped', 'Layer 1', 'https://example.com');
+
+
+SELECT * FROM measure WHERE measure_id >= 780;
+-- b. Add a record to the "area" table
+
+INSERT INTO area (area_id, area_name, area_description, area_link, bng_hab_mgt, bng_hab_creation, local_funding_schemes)
+VALUES (80, 'New Area', 'Area Description', 'https://example.com', 'Management Plan', 'Creation Plan', 'Scheme A');
+-- c. Add a record to the "measure_type" table
+
+INSERT INTO measure_type (measure_type)
+VALUES ('New Type');
+-- d. Add a record to the "stakeholder" table
+
+INSERT INTO stakeholder (stakeholder)
+VALUES ('New Stakeholder');
+-- e. Add a record to the "grant_table" table
+
+INSERT INTO grant_table (grant_id, grant_name, grant_scheme, url, summary_wrapped)
+VALUES ('GRANT456', 'New Grant', 'Scheme X', 'https://example.com', 'Grant Summary');
+-- f. Add a record to the "priority" table
+
+INSERT INTO priority (priority_id, biodiversity_priority, simplified_biodiversity_priority, theme)
+VALUES (788, 'New Priority', 'Simplified Priority', 'Theme A');
+-- 3. Delete Operations
+-- a. Delete a record from the "measure" table
+-------------------------------------------------------------------------
+-- Need to delete the rows with the measure_id from all linked tables first
+
+DELETE FROM measure_has_type 
+WHERE measure_type_id = (SELECT measure_type_id FROM measure_has_type
+WHERE measure_id = 1);
+
+DELETE FROM measure_area_priority_grant
+WHERE measure_id = 1;
+
+DELETE FROM measure_area_priority
+WHERE measure_id = 1;
+
+-- stakeholder delete
+DELETE FROM measure_has_stakeholder
+WHERE stakeholder_id = 1;
+
+DELETE FROM stakeholder
+WHERE stakeholder_id = 1;
+
+-- d. Delete a record from the "grant_table" table
+
+DELETE FROM grant_table
+WHERE grant_id = 'GRANT123';
+-- e. Delete a record from the "priority" table
+-------------------------------------------------------------------------
+
+DELETE FROM measure_area_priority_grant
+WHERE priority_id = 1;
+
+DELETE FROM measure_area_priority
+WHERE priority_id = 1;
+
+DELETE FROM priority
+WHERE priority_id = 1;
+-- f. Delete a record from the "area" table
+
+DELETE FROM measure_area_priority_grant
+WHERE area_id = 1;
+
+DELETE FROM measure_area_priority
+WHERE area_id = 1;
+
+DELETE FROM area
+WHERE area_id = 1;
+
 
 .help
 

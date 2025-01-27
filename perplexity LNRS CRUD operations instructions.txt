@@ -1,0 +1,152 @@
+System:
+
+You are an advanced analyst, an expert in data modelling and SQL. You create performant and precise SQL queries and are an expert in designing and administering databases.
+
+Context: 
+
+I'm going to give you the final schema for the LNRS database in duckdb. It will be used to hold the canonical data for an application to do CRUD operations on the database. I want a series of SQL queries to Create, Update and Delete rows in the various tables. I will specify the operations in the "Task:" section below. You should generate the queries, with examples being aware of the relationships between the tables and any necessary cascading operations needed. 
+
+Task:
+
+Review the duckdb-docs.md to understand the duckdb syntax.
+Carry out the following steps in order waiting for me to review and refine each step before proceeding to the next one. Ask questions if any step is not clear, or if you think there are anomalies in the data.
+
+1. Review and explain the structure and relationship of the data in the database
+2. Write a query, with example of how to edit (update) a record in the "measure" table
+3. Write a query, with example of how to edit (update) a record in the "measure_type" table
+4. Write a query, with example of how to edit (update) a record in the "stakeholder" table
+5. Write a query, with example of how to edit (update) a record in the "grant_table" table
+6. Write a query, with example of how to edit (update) a record in the "priority" table
+7. Write a query, with example of how to edit (update) a record in the "area" table
+8. Write a query, with example of how to add (create) a record in the "measure" table
+9. Write a query, with example of how to add (create) a record in the "area" table
+10. Write a query, with example of how to add (create) a record in the "measure_type" table
+11. Write a query, with example of how to add (create) a record in the "stakeholder" table
+12. Write a query, with example of how to add (create) a record in the "grant_table" table
+13. Write a query, with example of how to add (create) a record in the "priority" table
+14. Write a query, with example of how to delete a record in the "measure" table
+15. Write a query, with example of how to delete a record in the "measure_type" table
+16. Write a query, with example of how to delete) a record in the "stakeholder" table
+17. Write a query, with example of how to delete a record in the "grant_table" table
+18. Write a query, with example of how to delete a record in the "priority" table
+19. Write a query, with example of how to delete a record in the "area" table
+
+Here is the schema for the database:
+
+
+--            CREATE TABLES                                     --
+------------------------------------------------------------------
+-- 1) MEASURE
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE measure (
+    measure_id  INTEGER NOT NULL PRIMARY KEY,
+    measure     VARCHAR,
+    other_priorities_delivered VARCHAR,
+    core_supplementary        VARCHAR,
+    mapped_unmapped           VARCHAR,
+    relevant_map_layer        VARCHAR,
+    link_to_further_guidance  VARCHAR
+);
+
+------------------------------------------------------------------
+-- 2) MEASURE_TYPE
+------------------------------------------------------------------
+CREATE OR REPLACE SEQUENCE seq_measure_type_id START 1;
+
+CREATE OR REPLACE TABLE measure_type (
+    measure_type_id INTEGER NOT NULL PRIMARY KEY DEFAULT nextval('seq_measure_type_id'),
+    measure_type    VARCHAR
+);
+
+------------------------------------------------------------------
+-- 3) STAKEHOLDER
+------------------------------------------------------------------
+CREATE OR REPLACE SEQUENCE seq_stakeholder_id START 1;
+
+CREATE OR REPLACE TABLE stakeholder (
+    stakeholder_id INTEGER NOT NULL PRIMARY KEY DEFAULT nextval('seq_stakeholder_id'),
+    stakeholder    VARCHAR
+);
+
+------------------------------------------------------------------
+-- 4) MEASURE_HAS_TYPE (bridge)
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE measure_has_type (
+    measure_id      INTEGER NOT NULL,
+    measure_type_id INTEGER NOT NULL,
+    PRIMARY KEY (measure_id, measure_type_id),
+    FOREIGN KEY (measure_id)      REFERENCES measure(measure_id),
+    FOREIGN KEY (measure_type_id) REFERENCES measure_type(measure_type_id)
+);
+
+------------------------------------------------------------------
+-- 5) MEASURE_HAS_STAKEHOLDER (bridge)
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE measure_has_stakeholder (
+    measure_id     INTEGER NOT NULL,
+    stakeholder_id INTEGER NOT NULL,
+    PRIMARY KEY (measure_id, stakeholder_id),
+    FOREIGN KEY (measure_id)     REFERENCES measure(measure_id),
+    FOREIGN KEY (stakeholder_id) REFERENCES stakeholder(stakeholder_id)
+);
+
+------------------------------------------------------------------
+-- 6) AREA
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE area (
+    area_id          INTEGER NOT NULL PRIMARY KEY,
+    area_name        VARCHAR,
+    area_description VARCHAR,
+    area_link        VARCHAR,
+    bng_hab_mgt      VARCHAR,
+    bng_hab_creation VARCHAR,
+    local_funding_schemes VARCHAR
+);
+
+------------------------------------------------------------------
+-- 7) PRIORITY
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE priority (
+    priority_id INTEGER NOT NULL PRIMARY KEY,
+    biodiversity_priority           VARCHAR,
+    simplified_biodiversity_priority VARCHAR,
+    theme                           VARCHAR
+);
+
+------------------------------------------------------------------
+-- 8) GRANT_TABLE (renamed to avoid reserved keyword)
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE grant_table (
+    grant_id              VARCHAR NOT NULL PRIMARY KEY,
+    grant_name            VARCHAR,
+    grant_scheme          VARCHAR,
+    url                   VARCHAR,
+    summary_wrapped       VARCHAR
+);
+
+------------------------------------------------------------------
+-- 9) MEASURE_AREA_PRIORITY
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE measure_area_priority (
+    measure_id  INTEGER NOT NULL,
+    area_id     INTEGER NOT NULL,
+    priority_id INTEGER NOT NULL,
+    PRIMARY KEY (measure_id, area_id, priority_id),
+    FOREIGN KEY (measure_id)  REFERENCES measure(measure_id),
+    FOREIGN KEY (area_id)     REFERENCES area(area_id),
+    FOREIGN KEY (priority_id) REFERENCES priority(priority_id)
+);
+
+------------------------------------------------------------------
+-- 10) MEASURE_AREA_PRIORITY_GRANT
+------------------------------------------------------------------
+CREATE OR REPLACE TABLE measure_area_priority_grant (
+    measure_id  INTEGER NOT NULL,
+    area_id     INTEGER NOT NULL,
+    priority_id INTEGER NOT NULL,
+    grant_id    VARCHAR NOT NULL,
+    PRIMARY KEY (measure_id, area_id, priority_id, grant_id),
+    FOREIGN KEY (measure_id, area_id, priority_id)
+        REFERENCES measure_area_priority (measure_id, area_id, priority_id),
+    FOREIGN KEY (grant_id) REFERENCES grant_table(grant_id)
+);
