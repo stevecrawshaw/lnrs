@@ -4,21 +4,61 @@
 -- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
 -- and recreate
 
-
 rm data/lnrs_3nf_o1.duckdb
 
 duckdb
 ATTACH 'data/lnrs_3nf_o1.duckdb' AS lnrs;
---INSTALL HTTPFS;
--- LOAD HTTPFS;
+INSTALL HTTPFS;
+LOAD HTTPFS;
 
 USE lnrs;
 
-.tables
-
+-- get the main table for the app data
 CREATE OR REPLACE TABLE source_table AS
 SELECT * 
 FROM read_parquet('data/area-measures-tbl.parquet');
+
+-- get tables for species and how they relate to areas and priorities
+
+
+-- TODO change to insert
+-- CREATE OR REPLACE TABLE species AS
+-- SELECT *
+-- FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-species-tbl/exports/parquet');
+
+
+CREATE OR REPLACE TABLE species_priority AS
+SELECT species_id, priority_id
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-priority-tbl/exports/parquet');
+
+CREATE OR REPLACE TABLE species_priority(
+species_id INTEGER NOT NULL,
+priority_id INTEGER NOT NULL);
+
+CREATE OR REPLACE TABLE species_area AS
+SELECT species_id, area_id
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-area-tbl/exports/parquet');
+
+.tables
+
+-- TODO change to insert
+FROM species_priority;
+-- SELECT DISTINCT * 
+-- FROM species_area
+-- LEFT JOIN species_priority
+-- USING (species_id)
+
+-- TODO move and change to insert
+-- CREATE OR REPLACE TABLE species_area_priority(
+--     species_id INTEGER NOT NULL,
+--     area_id INTEGER NOT NULL,
+--     priority_id INTEGER NOT NULL,
+-- PRIMARY KEY (species_id, area_id, priority_id),
+-- FOREIGN KEY (species_id) REFERENCES species(species_id),
+-- FOREIGN KEY (area_id) REFERENCES area(area_id),
+-- FOREIGN KEY (priority_id) REFERENCES priority(priority_id));
+
+
 
 --            CREATE TABLES                                     --
 ------------------------------------------------------------------
@@ -98,6 +138,41 @@ CREATE OR REPLACE TABLE priority (
     simplified_biodiversity_priority VARCHAR,
     theme                           VARCHAR
 );
+
+
+CREATE OR REPLACE TABLE species(
+    taxa VARCHAR,
+    common_name VARCHAR,
+    assemblage VARCHAR,
+    linnaean_name VARCHAR,
+    species_id INTEGER PRIMARY KEY,
+    usage_key VARCHAR,
+    scientific_name VARCHAR,
+    status VARCHAR,
+    kingdom VARCHAR,
+    phylum VARCHAR,
+    "order" VARCHAR,
+    "family" VARCHAR,
+    genus VARCHAR,
+    species VARCHAR,
+    kingdom_key VARCHAR,
+    phylum_key VARCHAR,
+    class_key VARCHAR,
+    order_key VARCHAR,
+    family_key VARCHAR,
+    genus_key VARCHAR,
+    species_key VARCHAR,
+    "synonym" VARCHAR,
+    "class" VARCHAR,
+    accepted_usage_key VARCHAR,
+    verbatim_name VARCHAR,
+    verbatim_index BIGINT,
+    gbif_species_url VARCHAR,
+    image_url VARCHAR,
+    license VARCHAR,
+    attribution VARCHAR,
+    photo_url VARCHAR);
+
 
 ------------------------------------------------------------------
 -- 8) GRANT_TABLE (renamed to avoid reserved keyword)
