@@ -4,14 +4,16 @@
 -- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
 -- and recreate
 
-rm data/lnrs_3nf_o1.duckdb
+-- rm data/lnrs_3nf_o1.duckdb
 
 duckdb
+
 ATTACH 'data/lnrs_3nf_o1.duckdb' AS lnrs;
+USE lnrs;
 INSTALL HTTPFS;
 LOAD HTTPFS;
-
-USE lnrs;
+INSTALL SPATIAL;
+LOAD SPATIAL;
 
 -- get the main table for the app data
 CREATE OR REPLACE TABLE source_table AS
@@ -19,45 +21,6 @@ SELECT *
 FROM read_parquet('data/area-measures-tbl.parquet');
 
 -- get tables for species and how they relate to areas and priorities
-
-
--- TODO change to insert
--- CREATE OR REPLACE TABLE species AS
--- SELECT *
--- FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-species-tbl/exports/parquet');
-
-
-CREATE OR REPLACE TABLE species_priority AS
-SELECT species_id, priority_id
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-priority-tbl/exports/parquet');
-
-CREATE OR REPLACE TABLE species_priority(
-species_id INTEGER NOT NULL,
-priority_id INTEGER NOT NULL);
-
-CREATE OR REPLACE TABLE species_area AS
-SELECT species_id, area_id
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-area-tbl/exports/parquet');
-
-.tables
-
--- TODO change to insert
-FROM species_priority;
--- SELECT DISTINCT * 
--- FROM species_area
--- LEFT JOIN species_priority
--- USING (species_id)
-
--- TODO move and change to insert
--- CREATE OR REPLACE TABLE species_area_priority(
---     species_id INTEGER NOT NULL,
---     area_id INTEGER NOT NULL,
---     priority_id INTEGER NOT NULL,
--- PRIMARY KEY (species_id, area_id, priority_id),
--- FOREIGN KEY (species_id) REFERENCES species(species_id),
--- FOREIGN KEY (area_id) REFERENCES area(area_id),
--- FOREIGN KEY (priority_id) REFERENCES priority(priority_id));
-
 
 
 --            CREATE TABLES                                     --
@@ -139,6 +102,9 @@ CREATE OR REPLACE TABLE priority (
     theme                           VARCHAR
 );
 
+------------------------------------------------------------------
+-- 8) SPECIES
+------------------------------------------------------------------
 
 CREATE OR REPLACE TABLE species(
     taxa VARCHAR,
@@ -175,7 +141,7 @@ CREATE OR REPLACE TABLE species(
 
 
 ------------------------------------------------------------------
--- 8) GRANT_TABLE (renamed to avoid reserved keyword)
+-- 9) GRANT_TABLE (renamed to avoid reserved keyword)
 ------------------------------------------------------------------
 CREATE OR REPLACE TABLE grant_table (
     grant_id              VARCHAR NOT NULL PRIMARY KEY,
@@ -186,7 +152,7 @@ CREATE OR REPLACE TABLE grant_table (
 );
 
 ------------------------------------------------------------------
--- 9) MEASURE_AREA_PRIORITY
+-- 10) MEASURE_AREA_PRIORITY
 ------------------------------------------------------------------
 CREATE OR REPLACE TABLE measure_area_priority (
     measure_id  INTEGER NOT NULL,
@@ -199,7 +165,7 @@ CREATE OR REPLACE TABLE measure_area_priority (
 );
 
 ------------------------------------------------------------------
--- 10) MEASURE_AREA_PRIORITY_GRANT
+-- 11) MEASURE_AREA_PRIORITY_GRANT
 ------------------------------------------------------------------
 CREATE OR REPLACE TABLE measure_area_priority_grant (
     measure_id  INTEGER NOT NULL,
@@ -212,6 +178,28 @@ CREATE OR REPLACE TABLE measure_area_priority_grant (
     FOREIGN KEY (grant_id) REFERENCES grant_table(grant_id)
 );
 
+------------------------------------------------------------------
+-- 12) SPECIES PRIORITY AREA
+------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE species_area_priority(
+    species_id INTEGER NOT NULL,
+    area_id INTEGER NOT NULL,
+    priority_id INTEGER NOT NULL,
+PRIMARY KEY (species_id, area_id, priority_id),
+FOREIGN KEY (species_id) REFERENCES species(species_id),
+FOREIGN KEY (area_id) REFERENCES area(area_id),
+FOREIGN KEY (priority_id) REFERENCES priority(priority_id));
+
+------------------------------------------------------------------
+-- 13) ARE GEOM TABLE - the 694 polygons
+------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE area_geom(
+    geo_point_2d GEOMETRY,
+    geo_shape GEOMETRY,
+    area_id INTEGER
+);
 
 .tables
 ----------------------------------------------------------------------------
@@ -219,28 +207,27 @@ CREATE OR REPLACE TABLE measure_area_priority_grant (
 ----------------------------------------------------------------------------
 
 -- 1) Insert into measure
-
+-- revised to get all measures
 INSERT INTO measure (
     measure_id,
     measure,
-    other_priorities_delivered,
+    --other_priorities_delivered,
     core_supplementary,
     mapped_unmapped,
-    relevant_map_layer,
+    --relevant_map_layer,
     link_to_further_guidance
 )
 SELECT DISTINCT
     measure_id,
     measure,
-    other_priorities_delivered,
+    --other_priorities_delivered,
     core_supplementary,
     mapped_unmapped,
-    relevant_map_layer,
+    --relevant_map_layer,
     link_to_further_guidance
-FROM source_table
-WHERE measure_id IS NOT NULL;
+FROM read_csv('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-measures/exports/csv?lang=en&timezone=Europe%2FLondon&use_labels=false&delimiter=%2C');
 
--- area insert
+FROM measure;
 
 INSERT INTO area (
     area_id,
@@ -264,19 +251,10 @@ WHERE area_id IS NOT NULL;
 
 -- priority insert
 
-INSERT INTO priority (
-    priority_id,
-    biodiversity_priority,
-    simplified_biodiversity_priority,
-    theme
-)
-SELECT DISTINCT
-    priority_id,
-    biodiversity_priority,
-    simplified_biodiversity_priority,
-    theme
-FROM source_table
-WHERE priority_id IS NOT NULL;
+INSERT INTO priority 
+BY NAME
+SELECT *
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/priorities-grouped-tbl/exports/parquet');
 
 -- grant insert
 
@@ -379,6 +357,39 @@ WHERE measure_id IS NOT NULL
   AND priority_id IS NOT NULL
   AND grant_id IS NOT NULL;
 
+-- 7) Insert into species
+
+INSERT INTO species
+BY NAME
+SELECT * 
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-species-tbl/exports/parquet');
+
+-- 8) Insert into species_area_priority
+
+INSERT INTO species_area_priority
+BY NAME
+(SELECT species_id, area_id, priority_id
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-area-tbl/exports/parquet')
+LEFT JOIN 
+(SELECT species_id, priority_id
+FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-priority-tbl/exports/parquet'))
+USING (species_id));
+
+-- 9) Insert into area_geom
+
+INSERT INTO area_geom(
+    geo_point_2d,
+    geo_shape,
+    area_id
+)
+SELECT 
+    geo_point_2d,
+    geo_shape,
+    id area_id
+FROM read_parquet('data/lnrs-sub-areas.parquet');
+
+
+
 -- Recreate source_table with a Single  Query
 -- If you wish to see all of the columns in a single result set (mirroring source_table), 
 -- you can do so with the following join query. 
@@ -390,10 +401,10 @@ SELECT
     /* Measures */
     m.measure_id,
     m.measure,
-    m.other_priorities_delivered,
+    --m.other_priorities_delivered,
     m.core_supplementary,
     m.mapped_unmapped,
-    m.relevant_map_layer,
+    -- m.relevant_map_layer,
     m.link_to_further_guidance,
 
     /* Measure Types (one row per measure_type if multiple exist) */
@@ -507,6 +518,8 @@ SELECT
     , "url"
 FROM source_table_recreated_vw;
 
+FROM apmg_slim_vw;
+
 
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters
 COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
@@ -514,6 +527,9 @@ COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
 -- Now we need a process to update (edit) the values in the individual tables
 -- and then update the source_table_recreated view
 
+
+
+----------------------------------------------------------------
 ----------------------------------------------------------------
 -- CRUD OPEARATION ON THE TABLES
 ----------------------------------------------------------------
