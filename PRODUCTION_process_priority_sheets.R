@@ -9,7 +9,7 @@ pacman::p_load(tidyverse,
              sf)
 
 # Source Data ----
-path = "data/Priorities and Measures Master for portal_for upload to app.xlsx"
+path = "data/Priorities and Measures Master DEPRECATED SEE URL ABOVE for portal_for upload to app.xlsx"
 
 sheets_vec <-
 readxl::excel_sheets(path)
@@ -437,7 +437,9 @@ glimpse()
 priorities_tbl <- make_priorities_tbl(sheets_list)
 
 # Measures ----
- 
+
+
+
 make_measures_raw_tbl <- function(
     sheets_list,
     measures_sheet_name = "measures_by_area",
@@ -463,7 +465,6 @@ make_clean_names())
 measures_raw_tbl |> 
   filter(!is.na(associated_priority_code))
 }
-
 
 
 make_area_measures_raw_tbl <- function(measures_raw_tbl){
@@ -577,6 +578,74 @@ area_measures_tbl <- make_measures_raw_tbl(
                          grants_tbl,
                          area_schemes_condensed_tbl)
 
+# Species and measures and BENEFITS ---
+
+make_reference_id_tbl <- function(raw_tbl, name){
+  id_col = glue("{name}_id")
+  raw_tbl |> 
+    t() |>
+    as_tibble() |>
+    set_names(name) |>
+    rownames_to_column(id_col) |>
+    mutate(across(ends_with("id"), as.integer))
+}
+
+
+benefits_raw_tbl <- sheets_list |> 
+  pluck("references") |>
+  select(x1:x14) |>
+  head(1) |> 
+   make_reference_id_tbl("benefit")
+
+valid_benefits_row_index <- min(which(benefits_raw_tbl$benefit == "0")) -1
+
+benefits_tbl <- benefits_raw_tbl |> 
+  head(valid_benefits_row_index)
+
+benefit_names <- benefits_tbl$benefit
+
+
+# Get benefits and benefits lookup tbl ----
+# to join onto measures_tbl to show co - benefits of measures
+
+
+measures_benefits_ids_tbl <- 
+  read_xlsx(path,
+            sheet = "Measures & Co-benefits") |> 
+  select(`Measure ID`, any_of(benefit_names)) |>
+  mutate(across(
+    .cols = any_of(benefit_names),
+    ~ if_else(
+      .x %in% c("x", "X"),
+      benefits_tbl$benefit_id[benefits_tbl$benefit == cur_column()],
+      NA_integer_))) |> 
+  glimpse()
+
+measures_benefits_lookup_tbl <- 
+  measures_benefits_ids_tbl |> 
+  pivot_longer(cols = -`Measure ID`,
+               names_to = "benefit",
+               values_to = "benefit_id") |>
+  select(-benefit) |> 
+  filter(!is.na(benefit_id)) |> 
+  clean_names()
+
+measures_benefits_tbl <- 
+  measures_benefits_lookup_tbl |> 
+  left_join(measures_tbl |> 
+              select(measure_id, measure),
+            by = join_by(measure_id == measure_id)) |> 
+  left_join(benefits_tbl |> 
+              select(benefit_id, benefit),
+            by = join_by(benefit_id == benefit_id)) |> 
+  glimpse()
+
+measures_benefits_grouped_tbl <- 
+  measures_benefits_tbl |> 
+  group_by(measure_id) |> 
+  summarise(benefits = paste(benefit, collapse = "\n")) |> 
+  view()
+
 measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
@@ -593,6 +662,8 @@ measures_tbl <- make_measures_raw_tbl(
          measure_id,
          priority_id = as.integer(priority_id)
          ) |> 
+  left_join(measures_benefits_grouped_tbl,
+            by = join_by(measure_id == measure_id)) |>
   glimpse()
 
 # identify discrepancy between area_measures_tbl and measures_tbl
@@ -737,6 +808,30 @@ species_priority_tbl <- species_priority_lookup_tbl |>
                      gbif_species_url),
             by = join_by(species_id == species_id)) |> 
   glimpse()
+
+
+# Get species measures lookup tbl ----
+# 
+species_measures_ids_tbl <- read_xlsx(workbook_path,
+                                   sheet = "Measures & Species",
+                                   ) |> 
+  select(`Measure ID`, any_of(species_tbl$species)) |>
+  mutate(across(
+    .cols = any_of(species_tbl$species),
+    ~ if_else(
+      .x %in% c("x", "X"),
+      species_tbl$species_id[species_tbl$species == cur_column()],
+      NA_integer_))) |> 
+  glimpse()
+
+species_measures_lookup_tbl <- 
+  species_measures_ids_tbl |> 
+  pivot_longer(cols = -`Measure ID`,
+               names_to = "species",
+               values_to = "species_id") |>
+  select(-species) |> 
+  filter(!is.na(species_id)) |> 
+  clean_names()
 
 
 

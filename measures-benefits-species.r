@@ -4,7 +4,7 @@ pacman::p_load(tidyverse,
                janitor,
                readxl)
 
-workbook_path <- "data/Measures co-benefits & Species_simplified.xlsx"
+workbook_path <- "data/Priorities and Measures Master for portal_2025 Stewardship update.xlsx"
 
 make_reference_id_tbl <- function(raw_tbl, name){
   id_col = glue("{name}_id")
@@ -18,17 +18,17 @@ make_reference_id_tbl <- function(raw_tbl, name){
 
 sheets <- readxl::excel_sheets(workbook_path)
 
-benefits_tbl <- read_xlsx(workbook_path,
+benefits_raw_tbl <- read_xlsx(workbook_path,
                           sheet = "references",
                           range = "A1:N2") |> 
   make_reference_id_tbl("benefit")
 
 valid_benefits_row_index <- min(which(benefits_tbl$benefit == "0")) -1
 
-benefits_valid_tbl <- benefits_tbl |> 
+benefits_tbl <- benefits_raw_tbl |> 
   head(valid_benefits_row_index)
 
-benefit_names <- benefits_valid_tbl$benefit
+benefit_names <- benefits_tbl$benefit
 
 species_tbl <- read_xlsx(workbook_path,
                           sheet = "references",
@@ -45,7 +45,7 @@ measures_benefits_ids_tbl <- read_xlsx(workbook_path,
     .cols = any_of(benefit_names),
     ~ if_else(
       .x %in% c("x", "X"),
-      benefits_valid_tbl$benefit_id[benefits_valid_tbl$benefit == cur_column()],
+      benefits_tbl$benefit_id[benefits_tbl$benefit == cur_column()],
       NA_integer_))) |> 
   glimpse()
 
@@ -80,3 +80,4 @@ species_measures_lookup_tbl <-
   select(-species) |> 
   filter(!is.na(species_id)) |> 
   clean_names()
+
