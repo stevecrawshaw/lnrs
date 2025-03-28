@@ -11,7 +11,7 @@ gbif_creds <- config::get(file = "../config.yml", config = "gbif")
 
 # specified by stuart
 #species_tbl <- read_csv2("data/species.csv")
-ods_species_path <- "data/lnrs-species-tbl.csv"
+ods_species_path <- "https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-species-tbl/exports/csv?lang=en&timezone=Europe%2FLondon&use_labels=false&delimiter=%2C"
 species_tbl <- read_csv(ods_species_path)
 
 
