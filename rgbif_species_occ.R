@@ -40,7 +40,7 @@ dl_key
 # see how long..
 occ_download_wait(dl_id)
 # download
-species_gbif_tbl <- occ_download_get(dl_id) %>% 
+species_gbif_tbl <- occ_download_get(dl_id, overwrite = TRUE) %>% 
     occ_download_import()
 # inspect
 species_gbif_tbl %>% 
