@@ -9,7 +9,7 @@ pacman::p_load(tidyverse,
              sf)
 
 # Source Data ----
-path = "data/Priorities and Measures Master DEPRECATED SEE URL ABOVE for portal_for upload to app.xlsx"
+path = "data/Priorities and Measures Master for portal_2025 Stewardship update.xlsx"
 
 sheets_vec <-
 readxl::excel_sheets(path)
@@ -443,11 +443,13 @@ priorities_tbl <- make_priorities_tbl(sheets_list)
 make_measures_raw_tbl <- function(
     sheets_list,
     measures_sheet_name = "measures_by_area",
-    start_col_for_areas_index = 15){
+    start_col_for_areas_index = 17){
+  
+# new columns added in latest version DO WE NEED OLD CS COLUMN?
 # do lots of renaming operations to create consistent names
 measures_raw_tbl <- sheets_list |> 
 pluck(measures_sheet_name) 
-
+# browser()
 (area_ids_raw <- names(measures_raw_tbl)[start_col_for_areas_index:dim(measures_raw_tbl)[2]])
 
 # a vector of area id's with underscores and trailing numbers removed
@@ -466,6 +468,12 @@ measures_raw_tbl |>
   filter(!is.na(associated_priority_code))
 }
 
+# make_measures_raw_tbl(
+#   sheets_list,
+#   measures_sheet_name = "measures_by_area",
+#   start_col_for_areas_index = 17) |> 
+#   glimpse()
+
 
 make_area_measures_raw_tbl <- function(measures_raw_tbl){
 
@@ -483,6 +491,13 @@ mutate(across(starts_with("x"),
                 as.integer())) 
 }
 
+
+make_measures_raw_tbl(
+  sheets_list,
+  measures_sheet_name = "measures_by_area",
+  start_col_for_areas_index = 17) |>
+  make_area_measures_raw_tbl() |>
+  glimpse()
 
 
 make_area_measures_interim_tbl <- function(area_measures_raw_tbl){
@@ -570,7 +585,7 @@ left_join(grants_tbl |>
 area_measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
-  start_col_for_areas_index = 15) |> 
+  start_col_for_areas_index = 17) |> 
   make_area_measures_raw_tbl() |> 
   make_area_measures_interim_tbl() |> 
   make_area_measures_tbl(areas_tbl,
@@ -600,9 +615,10 @@ benefits_raw_tbl <- sheets_list |>
 valid_benefits_row_index <- min(which(benefits_raw_tbl$benefit == "0")) -1
 
 benefits_tbl <- benefits_raw_tbl |> 
-  head(valid_benefits_row_index)
+  head(valid_benefits_row_index) |> 
+  mutate(benefit_name = make_clean_names(benefit)) 
 
-benefit_names <- benefits_tbl$benefit
+benefit_names <- benefits_tbl$benefit_name
 
 
 # Get benefits and benefits lookup tbl ----
@@ -610,25 +626,26 @@ benefit_names <- benefits_tbl$benefit
 
 
 measures_benefits_ids_tbl <- 
-  read_xlsx(path,
-            sheet = "Measures & Co-benefits") |> 
-  select(`Measure ID`, any_of(benefit_names)) |>
+  sheets_list |> pluck(
+    "measures_co_benefits") |>
+select(measure_id, any_of(benefit_names)) |>
   mutate(across(
-    .cols = any_of(benefit_names),
+    .cols = -measure_id,
     ~ if_else(
       .x %in% c("x", "X"),
-      benefits_tbl$benefit_id[benefits_tbl$benefit == cur_column()],
+      benefits_tbl$benefit_id[benefits_tbl$benefit_name == cur_column()],
       NA_integer_))) |> 
   glimpse()
 
 measures_benefits_lookup_tbl <- 
   measures_benefits_ids_tbl |> 
-  pivot_longer(cols = -`Measure ID`,
+  pivot_longer(cols = -measure_id,
                names_to = "benefit",
                values_to = "benefit_id") |>
   select(-benefit) |> 
   filter(!is.na(benefit_id)) |> 
   clean_names()
+
 
 measures_benefits_tbl <- 
   measures_benefits_lookup_tbl |> 
@@ -649,7 +666,7 @@ measures_benefits_grouped_tbl <-
 measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
-  start_col_for_areas_index = 15) |> 
+  start_col_for_areas_index = 17) |> 
   make_area_measures_raw_tbl() |> 
   transmute(
          measure,
@@ -811,22 +828,31 @@ species_priority_tbl <- species_priority_lookup_tbl |>
 
 
 # Get species measures lookup tbl ----
+
+species_names_tbl <- species_tbl |> 
+  transmute(common_name,
+            clean_name = make_clean_names(common_name),
+            species_id) |> 
+  glimpse()
+
 # 
-species_measures_ids_tbl <- read_xlsx(workbook_path,
-                                   sheet = "Measures & Species",
-                                   ) |> 
-  select(`Measure ID`, any_of(species_tbl$species)) |>
+species_measures_ids_tbl <- 
+  # read_xlsx(workbook_path,
+  #           sheet = "Measures & Species") |> 
+  sheets_list |>
+  pluck("measures_species") |>
+  select(measure_id,  everything(), -c(priority, measure)) |>
   mutate(across(
-    .cols = any_of(species_tbl$species),
+    .cols = -measure_id,
     ~ if_else(
       .x %in% c("x", "X"),
-      species_tbl$species_id[species_tbl$species == cur_column()],
+      species_names_tbl$species_id[species_names_tbl$clean_name == cur_column()],
       NA_integer_))) |> 
   glimpse()
 
 species_measures_lookup_tbl <- 
   species_measures_ids_tbl |> 
-  pivot_longer(cols = -`Measure ID`,
+  pivot_longer(cols = -measure_id,
                names_to = "species",
                values_to = "species_id") |>
   select(-species) |> 
