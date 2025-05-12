@@ -9,7 +9,7 @@ pacman::p_load(tidyverse,
              sf)
 
 # Source Data ----
-path = "data/Priorities and Measures Master for portal_2025 Stewardship update.xlsx"
+path = "data/Priorities and Measures Master for portal_Copy for grants update May 25.xlsx"
 
 sheets_vec <-
 readxl::excel_sheets(path)
@@ -121,7 +121,7 @@ rename_action_col <- function(tbl){
                 .cols = starts_with("SFI")) 
 }
 
-#    Grants ----
+#    Grants ---- ###########################
 
 make_grants_tbl <- function(cs_tbl,
                           sfi_tbl,
@@ -309,13 +309,82 @@ ofc_clean_tbl <- ofc_raw_tbl |>
          grant_name = glue("{grant_id}: {fund_name}"),
          url = link)
 
-#     Consolidate grant data 
+# New countryside stewardship data
+# CS has been replaced by CS - Higher Tier Actions and CS - Capital Items
+# This code collects these data. Note it's not possible to apply yet (may 2025)
+# But the urls point to generic guidance pages 
+csht_url <- "https://www.gov.uk/government/publications/countryside-stewardship-higher-tier-get-ready-to-apply/countryside-stewardship-higher-tier-actions"
 
-grants_tbl <- make_grants_tbl(cs_tbl,
-                            sfi_tbl, 
-                            ofc_clean_tbl,
-                            cs_grant_codes_tbl) |> 
-glimpse()
+csht_cap_url <- "https://www.gov.uk/government/publications/countryside-stewardship-higher-tier-get-ready-to-apply/countryside-stewardship-higher-tier-new-capital-items"
+
+
+grant_scheme_from_url <- function(url){
+
+  url |> 
+  str_match("y/count.+$") |> 
+  str_remove("y/") |> 
+  str_split("-", simplify = TRUE) |> 
+  as.vector() |> 
+  map_chr(~substr(.x, 1, 1) |> 
+            str_to_upper()) |> 
+            str_c(collapse = "")
+}
+
+
+make_csht_tbl <- function(url){
+  # return a table of grants and details from a url of the countryside
+  # stewardship page. There are 2 here: Higher Tier and Capital Items
+  gs = grant_scheme_from_url(url)
+  
+  url |>
+  read_html(url) |> 
+  html_nodes("h3") |> 
+  html_attr("id") |> 
+  discard(is.na) |> 
+  tibble() |> 
+  set_names("action_id") |> 
+  mutate(grant_scheme = gs)
+ 
+}
+
+csht_tbl <- list(csht_url, csht_cap_url) |> 
+  map(make_csht_tbl) |> 
+  bind_rows() 
+
+
+cs_new_tbl <- csht_tbl |> 
+   mutate(grant_id = str_split_i(action_id, "-", i = 1) |> str_to_upper(),
+         url = glue("{csht_url}#{action_id}"),
+         desc = map(action_id, ~str_split(.x, "-", simplify = TRUE) |>
+                      discard_at(1) |> 
+                      str_c(collapse = " ") |> 
+                      str_to_sentence()),
+        grant_name = glue("{grant_id}: {desc}"),
+         desc = NULL,
+         action_id = NULL
+           
+  ) |> glimpse()
+
+
+#     Consolidate grant data #######################################
+
+grants_tbl <- bind_rows(cs_new_tbl, ofc_clean_tbl) |> 
+  mutate(grant_summary = glue(
+    "Grant name: {grant_name}\n
+   Grant scheme: {grant_scheme}\n
+   Link: <a href={url} target=_blank>{url}</a>\n
+   url: {url}")) |> 
+  add_id() |> 
+  glimpse()
+
+# deprecated
+# grants_tbl <- make_grants_tbl(
+#   cs_tbl, #drop
+#   sfi_tbl, #drop 
+#   ofc_clean_tbl,
+#   cs_grant_codes_tbl
+#   ) |> 
+# glimpse()
 
 # Habitat Creation and Restoration ----
 # 
@@ -443,7 +512,7 @@ priorities_tbl <- make_priorities_tbl(sheets_list)
 make_measures_raw_tbl <- function(
     sheets_list,
     measures_sheet_name = "measures_by_area",
-    start_col_for_areas_index = 17){
+    start_col_for_areas_index = 16){
   
 # new columns added in latest version DO WE NEED OLD CS COLUMN?
 # do lots of renaming operations to create consistent names
@@ -495,7 +564,7 @@ mutate(across(starts_with("x"),
 make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
-  start_col_for_areas_index = 17) |>
+  start_col_for_areas_index = 16) |>
   make_area_measures_raw_tbl() |>
   glimpse()
 
@@ -513,8 +582,9 @@ select(measure_id, starts_with("x"),
        stakeholder, 
        relevant_map_layer,
        link_to_further_guidance,
-       countryside_stewardship,
-       sfi, 
+       #countryside_stewardship_old,
+       higher_tier_countryside_stewardship_and_capital_items,
+       #sfi, 
        other_funding) |> 
 pivot_longer(cols = starts_with("x"),
              names_to = "area_x",
@@ -525,15 +595,25 @@ filter(!is.na(area_id))
 
 grant_cleaned_tbl <- filtered_long_tbl |> 
 select(-area_x) |> 
-mutate(across(.cols = c(countryside_stewardship, sfi, other_funding),
+mutate(across(.cols = c(
+  higher_tier_countryside_stewardship_and_capital_items,
+  # sfi,
+  other_funding
+  ),
               ~replace_na(.x, "xxx")),
-       grant_id = paste(countryside_stewardship,
-                     sfi, 
-                     other_funding,
-                     sep = "; ") |> 
+       grant_id = paste(
+         # countryside_stewardship,
+         # sfi,
+         higher_tier_countryside_stewardship_and_capital_items,
+         other_funding,
+         sep = "; ") |> 
          str_remove_all("; xxx|\\r|\\n"),
        priority_id = as.integer(priority_id)) |> 
-select(-c(countryside_stewardship, sfi, other_funding))
+select(-c(
+  higher_tier_countryside_stewardship_and_capital_items,
+  # sfi,
+  other_funding
+  ))
 
 sep_longer_tbl <- grant_cleaned_tbl |> 
 separate_longer_delim(grant_id, delim = "; ") |>
@@ -574,7 +654,7 @@ left_join(grants_tbl |>
             select(grant_id,
             grant_name,
             grant_scheme,
-            summary_wrapped,
+            grant_summary,
             url),
           by = join_by(grant_id == grant_id)) |> 
   left_join(area_schemes_condensed_tbl,
@@ -585,7 +665,7 @@ left_join(grants_tbl |>
 area_measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
-  start_col_for_areas_index = 17) |> 
+  start_col_for_areas_index = 16) |> 
   make_area_measures_raw_tbl() |> 
   make_area_measures_interim_tbl() |> 
   make_area_measures_tbl(areas_tbl,
