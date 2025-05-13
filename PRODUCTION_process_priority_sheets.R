@@ -26,53 +26,9 @@ sheets_vec |>
 
 sheets_list <- make_list_from_sheets(path, sheets_vec)
 
-
-# Utility Functions ----
-
-check_valid_grant_string <- function(x, letters = 2){
-
-if (letters == 2){
-  pattern = "^[A-Z]{2}\\d+$"
-} else if (letters == 3) {
-  pattern = "^[A-Z]{3}\\d+$"
-}
-str_detect(x, pattern)
-}
-
 upload_path <- "data/portal_upload/"
 
-save_tbls <- function(tbl_list, path = upload_path){
-# take a named list and write csv's for the portal 
-# and an excel file for introspection
-# csv - semicolon delims
-nms <-  paste0(path, names(tbl_list), ".csv")
-walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
-# excel for viewing
-write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
-
-}
-
-add_id <- function(tbl) {
-# helper to add autonumber integer
-tbl |> 
-  rownames_to_column("id") |> 
-  mutate(id = as.integer(id))
-}
-
-check_url <- function(url) {
-tryCatch({
-  # Create and perform the request
-  response <- request(url) |>
-    req_perform()
-  
-  # Check the status code
-  resp_status(response)
-  
-  
-}, error = function(e) {
-  0
-})
-}
+# Utility Functions ----
 
 linkchecker <- function(x){
 # check if a link is valid
@@ -101,6 +57,26 @@ tryCatch(
 )    
 }
 
+save_tbls <- function(tbl_list, path = upload_path){
+# take a named list and write csv's for the portal 
+# and an excel file for introspection
+# csv - semicolon delims
+nms <-  paste0(path, names(tbl_list), ".csv")
+walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
+# excel for viewing
+write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
+
+}
+
+add_id <- function(tbl) {
+# helper to add autonumber integer
+tbl |> 
+  rownames_to_column("id") |> 
+  mutate(id = as.integer(id))
+}
+
+
+
 clean_text <- function(input_string) {
 # Step 1: Replace non-space-padded hyphens with a placeholder
 # Use a unique placeholder that is unlikely to be in the text
@@ -114,190 +90,9 @@ output_string <- input_string |>
 return(output_string)
 }
 
-rename_action_col <- function(tbl){
-  # utility function to rename the disparate action columns
-  tbl |> 
-    rename_with(\(x) "sfi_action",
-                .cols = starts_with("SFI")) 
-}
 
 #    Grants ---- ###########################
 
-make_grants_tbl <- function(cs_tbl,
-                          sfi_tbl,
-                          ofc_clean_tbl,
-                          cs_grant_codes_tbl){
-
-bind_rows(cs_tbl, sfi_tbl, ofc_clean_tbl) |> 
-  mutate(code_prefix = if_else(str_starts(grant_id, "[A-Z]{2}"),
-                               str_extract_all(grant_id, "[A-Z]") |> 
-                                 map_chr(~paste0(.x, collapse = "")), "")) |> 
-  left_join(cs_grant_codes_tbl,
-            by = join_by(code_prefix == code_prefix)) |> 
-  mutate(code_prefix = NULL,
-         link_status = NULL) |> 
-  add_id() |> 
-  relocate(grant_id, id, url, grant_name, grant_scheme) |> 
-  mutate(grant_summary = glue(
-    "Grant name: {grant_name}\n
-   Grant scheme: {grant_scheme}\n
-   Link: <a href={url} target=_blank>{url}</a>\n
-   url: {url}"))
-
-}
-
-parse_cs_grant_codes <- function(sheets_list){
-
-sheets_list |> 
-  pluck("farming_codes") |> 
-  filter(scheme == "Countryside Stewardship") |> 
-  mutate(category = str_to_sentence(meaning),
-         meaning = NULL,
-         scheme = NULL) |> 
-  rename(code_prefix = code)
-}
-
-# construct tables of grants and links to be joined to measures
-# Countryside Stewardship Grant Links Table
-make_url_vec <- function(base_url = "https://www.gov.uk/countryside-stewardship-grants", num_pages = 6){
-
-pages_url <- paste0(rep(base_url, num_pages -1), "?page=", 2:num_pages)
-
-return(c(base_url, pages_url))
-}
-
-get_links <- function(url){
-  # Read the HTML content of the page
-  page <- read_html(url)
-  # Find all link nodes
-  link_nodes <- html_nodes(page, "a")
-  # output a tibble
-  tibble(
-    text = html_text(link_nodes),
-    url = html_attr(link_nodes, "href"))
-}
-
-make_links_raw_tbl <- function(make_url_vec, get_links){
-  make_url_vec() |> 
-    map(get_links) |> 
-    bind_rows()
-}
-
-make_cs_tbl <- function(links_raw_tbl, domain = "https://www.gov.uk"){
-  # clean and wrangle the links to get just the guidance links
-  links_raw_tbl |> 
-    mutate(grant_name = str_trim(text, side = "both")) |> 
-    # need to filter for 2 cap letters, numbers colon **and** 2 cap letters, numbers, space
-    filter(str_detect(grant_name, pattern = "^[A-Z]{2}\\d{0,2}:|^[A-Z]{2}\\d{0,2}\\s")) |> 
-    mutate(url = glue("{domain}{url}"), 
-           text = NULL,
-           grant_id = str_extract(grant_name, "^[^:]+") |> 
-             str_extract("^\\w+"),
-           grant_scheme = "Countryside Stewardship")
-# flipping missing colon BC3 BC4
-}
-
-
-sfi_2024_url <- "https://www.gov.uk/government/publications/sustainable-farming-incentive-scheme-expanded-offer-for-2024/sfi-scheme-information-expanded-offer-for-2024#annex-b-summary-of-the-initial-expanded-sfi-offer-from-summer-2024"
-
-make_sfi_web_tbl <- function(sfi_url = sfi_2024_url){
-
-rvest::read_html(sfi_url) |> 
-html_table() |> 
-keep(~ncol(.x) == 4) |> 
-map(rename_action_col) |> 
-bind_rows() |> 
-clean_names() |> 
-rename(grant_id = code)
-
-}
-
-sfi_web_tbl <- make_sfi_web_tbl(sfi_2024_url)
-# funding source links
-
-find_funding_base_url <- "https://www.gov.uk/find-funding-for-land-or-farms"
-
-funding_base_urls <- paste0(find_funding_base_url, c("?page=1", "?page=2", "?page=3"))
-
-get_sfi_vector <- function(funding_base_url){
-#extract the list of grant links given a page of grants
-funding_base_url |> 
-  read_html() |> 
-  html_elements(css = ".gem-c-document-list__item  ") |> 
-  html_text2()
-}
-
-get_sfi_stub <- function(item){
-# get the first item which contains the grant code, summary
-# and can be used to create the URL for the grant
-item |> 
-  str_split("\n") |> 
-  pluck(1, 1)
-}
-
-make_url_from_stub <- function(stub, base_url){
-# do various cleaning operations on the stub
-# and make a valid url for the grant
-stub_reformatted <- stub |> 
-  str_replace_all(pattern = ":\\s|\\s",
-                  replacement = "-") |> 
-  str_remove_all("\\(|\\)|,")|>
-  str_replace("%", "-percent") |>
-  str_remove("–") |> # this dash is not the same as the others
-  str_replace("--", "-") |> 
-  tolower()
-
-paste0(base_url, "/", stub_reformatted)
-}
-
-grant_name <- funding_base_urls |> 
-map(get_sfi_vector) |> 
-map(~map_chr(.x, get_sfi_stub)) |> 
-unlist() 
-
-grant_urls <- grant_name |> 
-map_chr(~make_url_from_stub(.x, find_funding_base_url))
-
-# lcheck <- map_chr(t, linkchecker) |> 
-#   map_lgl(~.x == "200")
-# 
-# t[!lcheck]
-
-sfi_funding_tbl <- tibble(grant_name, url = grant_urls) |> 
-separate(grant_name,
-         into = c("grant_id", "summary"),
-         sep = ": ",
-         remove = FALSE) |> 
-mutate(grant_scheme = "SFI",
-       summary_wrapped = str_wrap(summary,
-                                  whitespace_only = TRUE, 
-                                  width = 50),
-       link_status = map(url, linkchecker) |>
-         as.integer()) |> 
-glimpse()
-
-sfi_tbl <- sfi_web_tbl |> 
-left_join(sfi_funding_tbl,
-          by = join_by(grant_id)) |> 
-select(-c(sfi_action, annual_payment, action_s_duration)) |> 
-glimpse()
-
-# countryside stewardship and make final grants tbl
-
-links_raw_tbl <- make_links_raw_tbl(make_url_vec, get_links)
-
-cs_tbl <- make_cs_tbl(links_raw_tbl = links_raw_tbl,
-                    domain = "https://www.gov.uk") |> 
-mutate(link_status = map_int(url, check_url))
-
-# TRUE if all links good
-if(all(cs_tbl$link_status == 200)){
-TRUE
-} else {
-cs_tbl |> filter(link_status != 200)
-}
-
-cs_grant_codes_tbl <- parse_cs_grant_codes(sheets_list)
 
 # other funding codes
 # 
@@ -351,7 +146,6 @@ csht_tbl <- list(csht_url, csht_cap_url) |>
   map(make_csht_tbl) |> 
   bind_rows() 
 
-
 cs_new_tbl <- csht_tbl |> 
    mutate(grant_id = str_split_i(action_id, "-", i = 1) |> str_to_upper(),
          url = glue("{csht_url}#{action_id}"),
@@ -361,9 +155,8 @@ cs_new_tbl <- csht_tbl |>
                       str_to_sentence()),
         grant_name = glue("{grant_id}: {desc}"),
          desc = NULL,
-         action_id = NULL
-           
-  ) |> glimpse()
+         action_id = NULL) |>
+  glimpse()
 
 
 #     Consolidate grant data #######################################
@@ -377,14 +170,6 @@ grants_tbl <- bind_rows(cs_new_tbl, ofc_clean_tbl) |>
   add_id() |> 
   glimpse()
 
-# deprecated
-# grants_tbl <- make_grants_tbl(
-#   cs_tbl, #drop
-#   sfi_tbl, #drop 
-#   ofc_clean_tbl,
-#   cs_grant_codes_tbl
-#   ) |> 
-# glimpse()
 
 # Habitat Creation and Restoration ----
 # 
@@ -507,8 +292,6 @@ priorities_tbl <- make_priorities_tbl(sheets_list)
 
 # Measures ----
 
-
-
 make_measures_raw_tbl <- function(
     sheets_list,
     measures_sheet_name = "measures_by_area",
@@ -537,12 +320,6 @@ measures_raw_tbl |>
   filter(!is.na(associated_priority_code))
 }
 
-# make_measures_raw_tbl(
-#   sheets_list,
-#   measures_sheet_name = "measures_by_area",
-#   start_col_for_areas_index = 17) |> 
-#   glimpse()
-
 
 make_area_measures_raw_tbl <- function(measures_raw_tbl){
 
@@ -560,7 +337,7 @@ mutate(across(starts_with("x"),
                 as.integer())) 
 }
 
-
+# inspect
 make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
@@ -630,14 +407,6 @@ final_grant_cleaned_tbl
 
 }
 
-# make_measures_raw_tbl(
-#   sheets_list,
-#   measures_sheet_name = "measures_by_area",
-#   start_col_for_areas_index = 15) |> 
-#   make_area_measures_raw_tbl() |> 
-#   make_area_measures_interim_tbl() |>
-#   #distinct(measure_id) |> 
-#   view()
 
 make_area_measures_tbl <- function(area_measures_interim_tbl,
                                    areas_tbl,
@@ -673,30 +442,35 @@ area_measures_tbl <- make_measures_raw_tbl(
                          grants_tbl,
                          area_schemes_condensed_tbl)
 
+
+# slimmed down version for app
+area_measures_slim_tbl <- area_measures_tbl |> 
+  select(core_supplementary,
+         measure_type,
+         stakeholder,
+         area_name,
+         grant_id,
+         priority_id,
+         biodiversity_priority,
+         measure,
+         measure_id,
+         link_to_further_guidance,
+         grant_name,
+         url) |> 
+  glimpse()
+
+
 # Species and measures and BENEFITS ---
+# 
+# 
 
-make_reference_id_tbl <- function(raw_tbl, name){
-  id_col = glue("{name}_id")
-  raw_tbl |> 
-    t() |>
-    as_tibble() |>
-    set_names(name) |>
-    rownames_to_column(id_col) |>
-    mutate(across(ends_with("id"), as.integer))
-}
-
-
-benefits_raw_tbl <- sheets_list |> 
-  pluck("references") |>
-  select(x1:x14) |>
+benefits_tbl <- sheets_list |> pluck("references") |> 
   head(1) |> 
-   make_reference_id_tbl("benefit")
-
-valid_benefits_row_index <- min(which(benefits_raw_tbl$benefit == "0")) -1
-
-benefits_tbl <- benefits_raw_tbl |> 
-  head(valid_benefits_row_index) |> 
-  mutate(benefit_name = make_clean_names(benefit)) 
+  select(1:8) |> 
+  as.character() |> 
+  unname() |> 
+  enframe(name = "benefit_id", value = "benefit") |> 
+  mutate(benefit_name = make_clean_names(benefit))
 
 benefit_names <- benefits_tbl$benefit_name
 
@@ -724,29 +498,13 @@ measures_benefits_lookup_tbl <-
                values_to = "benefit_id") |>
   select(-benefit) |> 
   filter(!is.na(benefit_id)) |> 
-  clean_names()
-
-
-measures_benefits_tbl <- 
-  measures_benefits_lookup_tbl |> 
-  left_join(measures_tbl |> 
-              select(measure_id, measure),
-            by = join_by(measure_id == measure_id)) |> 
-  left_join(benefits_tbl |> 
-              select(benefit_id, benefit),
-            by = join_by(benefit_id == benefit_id)) |> 
+  clean_names() |> 
   glimpse()
 
-measures_benefits_grouped_tbl <- 
-  measures_benefits_tbl |> 
-  group_by(measure_id) |> 
-  summarise(benefits = paste(benefit, collapse = "\n")) |> 
-  view()
-
-measures_tbl <- make_measures_raw_tbl(
+measures_no_benefits_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
-  start_col_for_areas_index = 17) |> 
+  start_col_for_areas_index = 16) |> 
   make_area_measures_raw_tbl() |> 
   transmute(
          measure,
@@ -759,9 +517,27 @@ measures_tbl <- make_measures_raw_tbl(
          measure_id,
          priority_id = as.integer(priority_id)
          ) |> 
-  left_join(measures_benefits_grouped_tbl,
-            by = join_by(measure_id == measure_id)) |>
+  # left_join(measures_benefits_grouped_tbl,
+  #           by = join_by(measure_id == measure_id)) |>
   glimpse()
+
+measures_benefits_tbl <- 
+  measures_benefits_lookup_tbl |> 
+  left_join(measures_no_benefits_tbl |> 
+              select(measure_id, measure),
+            by = join_by(measure_id == measure_id)) |> 
+  left_join(benefits_tbl |> 
+              select(benefit_id, benefit),
+            by = join_by(benefit_id == benefit_id)) |> 
+  glimpse()
+
+measures_benefits_grouped_tbl <- 
+  measures_benefits_tbl |> 
+  group_by(measure_id) |> 
+  summarise(benefits = paste(benefit, collapse = "\n")) |> 
+  glimpse()
+
+
 
 # identify discrepancy between area_measures_tbl and measures_tbl
 # measures_tbl|> 
@@ -775,7 +551,8 @@ measures_tbl <- make_measures_raw_tbl(
 # 
 # Images
 
-species_image_raw_tbl <- read_csv("data/images_out_dash_tbl.csv") |> select(usage_key,
+species_image_raw_tbl <- read_csv("data/images_out_dash_tbl.csv") |>
+  select(usage_key,
          image_url = URLs) |> 
   mutate(usage_key = as.integer(usage_key)) 
 
@@ -791,8 +568,6 @@ species_image_tbl <- species_image_raw_tbl |>
   inner_join(species_image_metadata_tbl,
              by = join_by(usage_key == usage_key)) |> glimpse()
   
-
-
 make_priority_species_tbl <- function(sheets_list){
   sheets_list |> 
     pluck("priority_species") |> 
@@ -828,8 +603,9 @@ get_gbif_tbl <- function(priority_species_tbl){
 
 make_species_tbl <- function(priority_species_tbl, gbif_tbl, species_image_tbl){
   priority_species_tbl |> 
-    select(-relevant_priorities, -link_to_further_guidance) |> 
-    rename(common_name = species) |> 
+    select(-relevant_priorities) |> 
+    rename(common_name = species,
+           species_link = link_to_further_guidance) |> 
     inner_join(gbif_tbl,
                by = join_by(linnaean_name == canonical_name)) |> 
     left_join(species_image_tbl |> 
@@ -844,8 +620,9 @@ priority_species_tbl <- make_priority_species_tbl(sheets_list)
 
 gbif_tbl <- get_gbif_tbl(priority_species_tbl)
 
-
-species_tbl <- make_species_tbl(priority_species_tbl, gbif_tbl, species_image_tbl) |> 
+species_tbl <- make_species_tbl(priority_species_tbl,
+                                gbif_tbl,
+                                species_image_tbl) |> 
   glimpse()
 
 
@@ -888,6 +665,7 @@ species_area_tbl <- species_area_lookup_tbl |>
                      common_name,
                      scientific_name,
                      gbif_species_url,
+                     species_link,
                      image_url,
                      license,
                      attribution),
@@ -902,7 +680,8 @@ species_priority_tbl <- species_priority_lookup_tbl |>
               select(species_id,
                      common_name,
                      scientific_name,
-                     gbif_species_url),
+                     gbif_species_url,
+                     species_link),
             by = join_by(species_id == species_id)) |> 
   glimpse()
 
@@ -937,7 +716,23 @@ species_measures_lookup_tbl <-
                values_to = "species_id") |>
   select(-species) |> 
   filter(!is.na(species_id)) |> 
-  clean_names()
+  clean_names() |> 
+  glimpse()
+
+species_measures_tbl <- 
+  species_measures_lookup_tbl |> 
+  left_join(species_tbl, by = join_by(species_id == species_id)) |>
+  group_by(measure_id) |>
+  summarise(species = paste(common_name, collapse = "\n")) |>
+  glimpse()
+
+
+measures_tbl <- measures_no_benefits_tbl |> 
+  inner_join(measures_benefits_grouped_tbl, # add benefits col
+            by = join_by(measure_id == measure_id)) |>
+  left_join(species_measures_tbl, # add species col
+            by = join_by(measure_id == measure_id)) |>
+  glimpse()
 
 
 
@@ -950,6 +745,7 @@ tbl_list <- list(
 "measures-tbl" = measures_tbl,
 "species-tbl" = species_tbl,
 "area-measures-tbl" = area_measures_tbl,
+"lnrs-measures-priorities-grants-slim-tbl" = area_measures_slim_tbl,
 "species-priority-tbl" = species_priority_tbl,
 "species-area-tbl" = species_area_tbl,
 "area-funding-schemes-tbl" = area_funding_schemes_tbl,
