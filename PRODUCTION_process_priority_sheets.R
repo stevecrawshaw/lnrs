@@ -61,10 +61,10 @@ save_tbls <- function(tbl_list, path = upload_path){
 # take a named list and write csv's for the portal 
 # and an excel file for introspection
 # csv - semicolon delims
-nms <-  paste0(path, names(tbl_list), ".csv")
-walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
-# excel for viewing
-write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
+  nms <-  paste0(path, names(tbl_list), ".csv")
+  walk2(tbl_list, nms, ~write_csv2(.x, .y, na = ""))
+  # excel for viewing
+  write_xlsx(tbl_list, path = glue("{path}main_sheets.xlsx"))
 
 }
 
@@ -74,7 +74,6 @@ tbl |>
   rownames_to_column("id") |> 
   mutate(id = as.integer(id))
 }
-
 
 
 clean_text <- function(input_string) {
@@ -138,7 +137,8 @@ make_csht_tbl <- function(url){
   discard(is.na) |> 
   tibble() |> 
   set_names("action_id") |> 
-  mutate(grant_scheme = gs)
+  mutate(grant_scheme = gs,
+         base_url = url)
  
 }
 
@@ -148,14 +148,15 @@ csht_tbl <- list(csht_url, csht_cap_url) |>
 
 cs_new_tbl <- csht_tbl |> 
    mutate(grant_id = str_split_i(action_id, "-", i = 1) |> str_to_upper(),
-         url = glue("{csht_url}#{action_id}"),
+         url = glue("{base_url}#{action_id}"),
          desc = map(action_id, ~str_split(.x, "-", simplify = TRUE) |>
                       discard_at(1) |> 
                       str_c(collapse = " ") |> 
                       str_to_sentence()),
         grant_name = glue("{grant_id}: {desc}"),
          desc = NULL,
-         action_id = NULL) |>
+         action_id = NULL,
+        base_url = NULL) |>
   glimpse()
 
 
@@ -735,6 +736,20 @@ measures_tbl <- measures_no_benefits_tbl |>
   glimpse()
 
 
+# measures_concise_tbl <- read_lines(file = "data/measures_concise.txt") |> 
+#   enframe() |> 
+#   mutate(measure = str_remove_all(value, "\\r|\\n|\"")) |>
+#   separate_wider_delim(cols = measure,
+#                        delim = ";",
+#                        names = c("measure_id", "concise_measure")) |>
+#   mutate(measure_id = as.integer(measure_id),
+#          name = NULL,
+#          value = NULL) |>
+#   glimpse()
+# 
+# measures_concise_tbl |> 
+#   write_xlsx("data/measures_concise.xlsx")
+
 
 # Write Data ----
 
@@ -755,3 +770,4 @@ tbl_list <- list(
 write_rds(tbl_list, glue("{upload_path}portal_tbl_list.rds"))
 
 save_tbls(tbl_list, path = upload_path)
+
