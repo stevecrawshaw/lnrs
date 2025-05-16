@@ -432,6 +432,13 @@ left_join(grants_tbl |>
 
 }
 
+# get the shortened measures text from a separate sheet
+measures_concise_tbl <- sheets_list |> 
+  pluck("measures_concise") |> 
+  select(measure_id, concise_measure) |>
+  mutate(measure_id = as.integer(measure_id)) |>
+  glimpse()
+
 area_measures_tbl <- make_measures_raw_tbl(
   sheets_list,
   measures_sheet_name = "measures_by_area",
@@ -441,7 +448,8 @@ area_measures_tbl <- make_measures_raw_tbl(
   make_area_measures_tbl(areas_tbl,
                          priorities_tbl,
                          grants_tbl,
-                         area_schemes_condensed_tbl)
+                         area_schemes_condensed_tbl) |> 
+  left_join(measures_concise_tbl, by = join_by(measure_id == measure_id))
 
 
 # slimmed down version for app
@@ -454,6 +462,7 @@ area_measures_slim_tbl <- area_measures_tbl |>
          priority_id,
          biodiversity_priority,
          measure,
+         concise_measure,
          measure_id,
          link_to_further_guidance,
          grant_name,
@@ -697,8 +706,6 @@ species_names_tbl <- species_tbl |>
 
 # 
 species_measures_ids_tbl <- 
-  # read_xlsx(workbook_path,
-  #           sheet = "Measures & Species") |> 
   sheets_list |>
   pluck("measures_species") |>
   select(measure_id,  everything(), -c(priority, measure)) |>
@@ -733,6 +740,7 @@ measures_tbl <- measures_no_benefits_tbl |>
             by = join_by(measure_id == measure_id)) |>
   left_join(species_measures_tbl, # add species col
             by = join_by(measure_id == measure_id)) |>
+  left_join(measures_concise_tbl, by = join_by(measure_id == measure_id)) |>
   glimpse()
 
 
