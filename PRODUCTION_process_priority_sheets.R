@@ -68,11 +68,11 @@ save_tbls <- function(tbl_list, path = upload_path){
 
 }
 
-add_id <- function(tbl) {
+add_id <- function(tbl, id_col = "id") {
 # helper to add autonumber integer
 tbl |> 
-  rownames_to_column("id") |> 
-  mutate(id = as.integer(id))
+  rownames_to_column(var = id_col) |> 
+  mutate({{id_col}} := as.integer(rlang::eval_bare(rlang::parse_expr(id_col)))) 
 }
 
 
@@ -207,6 +207,37 @@ hab_creation_tbl <- parse_hab_sheet(sheets_list, "bng_hab_creation") |>
   glimpse()
 
 hab_mgt_tbl <- parse_hab_sheet(sheets_list, "bng_hab_mgt") |> 
+  glimpse()
+
+# Create long tables for the source database
+
+habitat_creation_long_tbl <- hab_creation_tbl |> 
+  separate_longer_delim(bng_hab_creation, delim = ":\n") |> 
+  set_names(c("area_id", "habitat")) |> 
+    glimpse()
+
+habitat_management_long_tbl <- hab_mgt_tbl |> 
+  separate_longer_delim(bng_hab_mgt, delim = ":\n") |> 
+  set_names(c("area_id", "habitat")) |>  
+  glimpse()
+
+habitat_tbl <- bind_rows(habitat_creation_long_tbl,
+                            habitat_management_long_tbl) |> 
+  distinct(habitat) |> 
+  add_id("habitat_id") |> 
+  glimpse()
+
+habitat_creation_area_lookup_tbl <- habitat_creation_long_tbl |> 
+  inner_join(habitat_tbl,
+            by = join_by(habitat == habitat)) |>
+  select(area_id, habitat_id) |>
+  glimpse()
+
+
+habitat_management_area_lookup_tbl <- habitat_management_long_tbl |> 
+  inner_join(habitat_tbl,
+            by = join_by(habitat == habitat)) |>
+  select(area_id, habitat_id) |>
   glimpse()
 
 # Areas ----
@@ -541,6 +572,8 @@ measures_benefits_tbl <-
             by = join_by(benefit_id == benefit_id)) |> 
   glimpse()
 
+benefits_tbl |> glimpse()
+
 measures_benefits_grouped_tbl <- 
   measures_benefits_tbl |> 
   group_by(measure_id) |> 
@@ -772,7 +805,13 @@ tbl_list <- list(
 "species-priority-tbl" = species_priority_tbl,
 "species-area-tbl" = species_area_tbl,
 "area-funding-schemes-tbl" = area_funding_schemes_tbl,
-"grants-tbl" = grants_tbl
+"grants-tbl" = grants_tbl,
+"habitat-tbl" = habitat_tbl,
+"habitat-creation-area-lookup-tbl" = habitat_creation_area_lookup_tbl,
+"habitat-management-area-lookup-tbl" = habitat_management_area_lookup_tbl,
+"measures_benefits_lookup_tbl" = measures_benefits_lookup_tbl,
+"benefits_tbl" = benefits_tbl,
+"species_measures_lookup_tbl" = species_measures_lookup_tbl
 )
 
 write_rds(tbl_list, glue("{upload_path}portal_tbl_list.rds"))

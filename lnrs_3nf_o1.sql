@@ -34,7 +34,8 @@ CREATE OR REPLACE TABLE measure (
     core_supplementary        VARCHAR,
     mapped_unmapped           VARCHAR,
     relevant_map_layer        VARCHAR,
-    link_to_further_guidance  VARCHAR
+    link_to_further_guidance  VARCHAR,
+    concise_measure           VARCHAR
 );
 
 ------------------------------------------------------------------
@@ -215,7 +216,8 @@ INSERT INTO measure (
     core_supplementary,
     mapped_unmapped,
     --relevant_map_layer,
-    link_to_further_guidance
+    link_to_further_guidance,
+    concise_measure
 )
 SELECT DISTINCT
     measure_id,
@@ -224,10 +226,9 @@ SELECT DISTINCT
     core_supplementary,
     mapped_unmapped,
     --relevant_map_layer,
-    link_to_further_guidance
+    link_to_further_guidance,
+    con
 FROM read_csv('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-measures/exports/csv?lang=en&timezone=Europe%2FLondon&use_labels=false&delimiter=%2C');
-
-FROM measure;
 
 INSERT INTO area (
     area_id,

@@ -1,0 +1,16 @@
+1. new VARCHAR field in measure table concise_measure
+
+need to export the benefits table with measure_id and lookup
+4. new lookup table measure_has_benefits
+5. new table benefits - joined to measure table by measure_has_benefits
+
+need to export the measure_species and lookup table
+6. new lookup table measure_has_species
+7. new table measure_species joined to measure by measure_has_species
+
+8. new area_funding_schemes table joined to areas.area_id
+
+habitats tables joined from area_tbl.area_id to each lookup, then habitat_tbl via the habitat_id
+9. new habitats_tbl table
+10 new habitat_creation_area_lookup_tbl
+11 habitat_management_area_lookup_tbl
