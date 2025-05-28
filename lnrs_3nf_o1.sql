@@ -4,7 +4,7 @@
 -- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
 -- and recreate
 
--- rm data/lnrs_3nf_o1.duckdb
+rm data/lnrs_3nf_o1.duckdb
 
 duckdb
 
@@ -111,6 +111,7 @@ CREATE OR REPLACE TABLE species(
     taxa VARCHAR,
     common_name VARCHAR,
     assemblage VARCHAR,
+    species_link VARCHAR,
     linnaean_name VARCHAR,
     species_id INTEGER PRIMARY KEY,
     usage_key VARCHAR,
@@ -145,11 +146,12 @@ CREATE OR REPLACE TABLE species(
 -- 9) GRANT_TABLE (renamed to avoid reserved keyword)
 ------------------------------------------------------------------
 CREATE OR REPLACE TABLE grant_table (
+
     grant_id              VARCHAR NOT NULL PRIMARY KEY,
     grant_name            VARCHAR,
     grant_scheme          VARCHAR,
     url                   VARCHAR,
-    summary_wrapped       VARCHAR
+    grant_summary       VARCHAR
 );
 
 ------------------------------------------------------------------
@@ -193,7 +195,7 @@ FOREIGN KEY (area_id) REFERENCES area(area_id),
 FOREIGN KEY (priority_id) REFERENCES priority(priority_id));
 
 ------------------------------------------------------------------
--- 13) ARE GEOM TABLE - the 694 polygons
+-- 13) AREA GEOM TABLE - the 694 polygons
 ------------------------------------------------------------------
 
 CREATE OR REPLACE TABLE area_geom(
@@ -202,9 +204,89 @@ CREATE OR REPLACE TABLE area_geom(
     area_id INTEGER
 );
 
+------------------------------------------------------------------
+-- 14) AREA FUNDING SCHEMES - MANY TO ONE ON AREA
+------------------------------------------------------------------
+
+
+CREATE OR REPLACE TABLE area_funding_schemes(
+    id INTEGER NOT NULL PRIMARY KEY,
+    area_id INTEGER NOT NULL,
+    local_funding_schemes VARCHAR,
+    FOREIGN KEY (area_id) REFERENCES area(area_id)
+);
+
+------------------------------------------------------------------
+-- 15) BENEFITS
+------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE benefits (
+    benefit_id INTEGER NOT NULL PRIMARY KEY,
+    benefit VARCHAR
+);
+
+------------------------------------------------------------------
+-- 16) MEASURE_HAS_BENEFITS (bridge)                             
+------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE measure_has_benefits (
+    measure_id INTEGER NOT NULL,
+    benefit_id INTEGER NOT NULL,
+    PRIMARY KEY (measure_id, benefit_id),
+    FOREIGN KEY (measure_id) REFERENCES measure(measure_id),
+    FOREIGN KEY (benefit_id) REFERENCES benefits(benefit_id)
+);
+
+
+------------------------------------------------------------------
+-- 17) MEASURE_HAS_SPECIES (bridge)
+------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE measure_has_species (
+    measure_id INTEGER NOT NULL,
+    species_id INTEGER NOT NULL,
+    PRIMARY KEY (measure_id, species_id),
+    FOREIGN KEY (measure_id) REFERENCES measure(measure_id),
+    FOREIGN KEY (species_id) REFERENCES species(species_id)
+);
+
+--------------------------------------------------------------------
+-- 18) HABITAT
+--------------------------------------------------------------------
+
+CREATE OR REPLACE TABLE habitat (
+    habitat_id INTEGER NOT NULL PRIMARY KEY,
+    habitat VARCHAR
+);
+
+--------------------------------------------------------------------
+-- 19) HABITAT_CREATION_AREA (bridge)
+--------------------------------------------------------------------
+CREATE OR REPLACE TABLE habitat_creation_area (
+    area_id INTEGER NOT NULL,
+    habitat_id INTEGER NOT NULL,
+    PRIMARY KEY (habitat_id, area_id),
+    FOREIGN KEY (habitat_id) REFERENCES habitat(habitat_id),
+    FOREIGN KEY (area_id) REFERENCES area(area_id)
+);
+
+----------------------------------------------------------------
+-- 20) HABITAT_MANAGEMENT_AREA (bridge)
+----------------------------------------------------------------
+
+CREATE OR REPLACE TABLE habitat_management_area (
+    area_id INTEGER NOT NULL,
+    habitat_id INTEGER NOT NULL,
+    PRIMARY KEY (habitat_id, area_id),
+    FOREIGN KEY (habitat_id) REFERENCES habitat(habitat_id),
+    FOREIGN KEY (area_id) REFERENCES area(area_id)
+);
+
+
 .tables
+
 ----------------------------------------------------------------------------
---                   INSERT STATEMENTS                                    --
+-- ******************  INSERT STATEMENTS  *************************
 ----------------------------------------------------------------------------
 
 -- 1) Insert into measure
@@ -227,8 +309,8 @@ SELECT DISTINCT
     mapped_unmapped,
     --relevant_map_layer,
     link_to_further_guidance,
-    con
-FROM read_csv('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-measures/exports/csv?lang=en&timezone=Europe%2FLondon&use_labels=false&delimiter=%2C');
+    concise_measure
+FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';');
 
 INSERT INTO area (
     area_id,
@@ -255,7 +337,7 @@ WHERE area_id IS NOT NULL;
 INSERT INTO priority 
 BY NAME
 SELECT *
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/priorities-grouped-tbl/exports/parquet');
+FROM read_csv('data/portal_upload/priorities-tbl.csv', delim = ';');
 
 -- grant insert
 
@@ -264,14 +346,14 @@ INSERT INTO grant_table (
     grant_name,
     grant_scheme,
     "url",
-    summary_wrapped
+    grant_summary
 )
 SELECT DISTINCT
     grant_id,
     grant_name,
     grant_scheme,
     "url",
-    summary_wrapped
+    grant_summary
 FROM source_table
 WHERE grant_id IS NOT NULL;
 
@@ -363,17 +445,18 @@ WHERE measure_id IS NOT NULL
 INSERT INTO species
 BY NAME
 SELECT * 
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/lnrs-species-tbl/exports/parquet');
+FROM read_csv('data/portal_upload/species-tbl.csv', delim = ';')
+WHERE species_id IS NOT NULL;
 
 -- 8) Insert into species_area_priority
 
 INSERT INTO species_area_priority
 BY NAME
 (SELECT species_id, area_id, priority_id
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-area-tbl/exports/parquet')
+FROM read_csv('data/portal_upload/species-area-tbl.csv', delim = ';')
 LEFT JOIN 
 (SELECT species_id, priority_id
-FROM read_parquet('https://opendata.westofengland-ca.gov.uk/api/explore/v2.1/catalog/datasets/species-priority-tbl/exports/parquet'))
+FROM read_csv('data/portal_upload/species-priority-tbl.csv', delim = ';'))
 USING (species_id));
 
 -- 9) Insert into area_geom
@@ -390,6 +473,78 @@ SELECT
 FROM read_parquet('data/lnrs-sub-areas.parquet');
 
 
+-- 10) Insert into area_funding_schemes
+INSERT INTO area_funding_schemes (
+    id,
+    area_id,
+    local_funding_schemes
+)
+SELECT 
+    id,
+    area_id,
+    local_funding_schemes
+FROM read_csv('data/portal_upload/area-funding-schemes-tbl.csv', delim = ';');
+
+
+-- 11) Insert into benefits
+INSERT INTO benefits (
+    benefit_id,
+    benefit
+)
+SELECT DISTINCT
+    benefit_id,
+    benefit
+FROM read_csv('data/portal_upload/benefits_tbl.csv', delim = ';');
+
+-- 12) Insert into measure_has_benefits (bridge)
+INSERT INTO measure_has_benefits (
+    measure_id,
+    benefit_id
+)
+SELECT measure_id, benefit_id
+FROM read_csv('data/portal_upload/measures_benefits_lookup_tbl.csv', delim = ';');
+
+-- 13) Insert into measure_has_species (bridge)
+INSERT INTO measure_has_species (
+    measure_id,
+    species_id
+)
+SELECT measure_id, species_id
+FROM read_csv('data/portal_upload/species_measures_lookup_tbl.csv', delim = ';');
+
+-- 14) Insert into habitat
+INSERT INTO habitat (
+    habitat_id,
+    habitat
+)
+SELECT 
+    habitat_id,
+    habitat
+FROM read_csv('data/portal_upload/habitat-tbl.csv', delim = ';');
+
+-- 15) Insert into habitat_creation_area (bridge)
+INSERT INTO habitat_creation_area (
+    area_id,
+    habitat_id
+)
+SELECT area_id, habitat_id
+FROM read_csv('data/portal_upload/habitat-creation-area-lookup-tbl.csv', delim = ';');
+
+-- 16) Insert into habitat_management_area (bridge)
+INSERT INTO habitat_management_area (
+    area_id,
+    habitat_id
+)
+SELECT area_id, habitat_id
+FROM read_csv('data/portal_upload/habitat-management-area-lookup-tbl.csv', delim = ';');
+
+.tables
+-- export the schema to paste into ERD AI app eraser
+.schema
+
+-----------------------------------------------------------------
+-- ****    ****   *****  CREATE VIEWS  ****    ****    ****    *****
+-----------------------------------------------------------------
 
 -- Recreate source_table with a Single  Query
 -- If you wish to see all of the columns in a single result set (mirroring source_table), 
