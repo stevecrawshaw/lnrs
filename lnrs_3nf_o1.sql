@@ -4,7 +4,7 @@
 -- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
 -- and recreate
 
-rm data/lnrs_3nf_o1.duckdb
+-- rm data/lnrs_3nf_o1.duckdb
 
 duckdb
 
@@ -588,15 +588,15 @@ SELECT
     mag.grant_id,
     g.grant_name,
     g.grant_scheme,
-    g.summary_wrapped,
+    g.grant_summary,
     g.url
 
 FROM measure_area_priority AS map
-JOIN measure AS m
+LEFT JOIN measure AS m
   ON map.measure_id = m.measure_id
-JOIN area AS a
+LEFT JOIN area AS a
   ON map.area_id = a.area_id
-JOIN priority AS p
+LEFT JOIN priority AS p
   ON map.priority_id = p.priority_id
 
 -- Many-to-many from measure -> measure_type
@@ -620,7 +620,11 @@ LEFT JOIN grant_table AS g
        ON mag.grant_id = g.grant_id;
 
 
-DESCRIBE FROM source_table;
+
+SELECT COUNT(*) FROM source_table_recreated_vw;
+DESCRIBE FROM source_table_recreated_vw;
+
+SELECT * FROM source_table WHERE grant_id = 'CBG';
 
 -- testing why there are fewer rows in the recreated table
 -- compared to the source table

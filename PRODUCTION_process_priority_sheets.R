@@ -375,7 +375,7 @@ make_measures_raw_tbl(
   measures_sheet_name = "measures_by_area",
   start_col_for_areas_index = 16) |>
   make_area_measures_raw_tbl() |>
-  glimpse()
+  view()
 
 
 make_area_measures_interim_tbl <- function(area_measures_raw_tbl){
@@ -446,8 +446,9 @@ make_area_measures_tbl <- function(area_measures_interim_tbl,
                                    grants_tbl,
                                    area_schemes_condensed_tbl){
 
+  
 area_measures_interim_tbl |> 
-left_join(areas_tbl, 
+  left_join(areas_tbl, 
           by = join_by(area_id == area_id)) |> 
 left_join(priorities_tbl, 
           by = join_by(priority_id == priority_id)) |> 
@@ -459,7 +460,11 @@ left_join(grants_tbl |>
             url),
           by = join_by(grant_id == grant_id)) |> 
   left_join(area_schemes_condensed_tbl,
-          by = join_by(area_id == area_id)) 
+          by = join_by(area_id == area_id)) |> 
+  # remove any rows where there is a grant_id but no url
+  # keep rows where there is no grant_id as some measures don't have grants
+  filter((!is.na(grant_id) &
+         !is.na(url)) | is.na(grant_id)) 
 
 }
 
@@ -481,6 +486,9 @@ area_measures_tbl <- make_measures_raw_tbl(
                          grants_tbl,
                          area_schemes_condensed_tbl) |> 
   left_join(measures_concise_tbl, by = join_by(measure_id == measure_id))
+
+
+
 
 
 # slimmed down version for app
