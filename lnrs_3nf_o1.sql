@@ -89,8 +89,7 @@ CREATE OR REPLACE TABLE area (
     area_description VARCHAR,
     area_link        VARCHAR,
     bng_hab_mgt      VARCHAR,
-    bng_hab_creation VARCHAR,
-    local_funding_schemes VARCHAR
+    bng_hab_creation VARCHAR
 );
 
 ------------------------------------------------------------------
@@ -208,13 +207,19 @@ CREATE OR REPLACE TABLE area_geom(
 -- 14) AREA FUNDING SCHEMES - MANY TO ONE ON AREA
 ------------------------------------------------------------------
 
-
 CREATE OR REPLACE TABLE area_funding_schemes(
     id INTEGER NOT NULL PRIMARY KEY,
+    local_funding_schemes VARCHAR NOT NULL
+);
+-- NEEDS CHECKING
+-- Bridge table to link areas with their funding schemes
+CREATE OR REPLACE TABLE area_funding_schemes (
+    id INTEGER NOT NULL,
     area_id INTEGER NOT NULL,
-    local_funding_schemes VARCHAR,
+    PRIMARY KEY (id, area_id),
     FOREIGN KEY (area_id) REFERENCES area(area_id)
 );
+
 
 ------------------------------------------------------------------
 -- 15) BENEFITS
@@ -318,8 +323,7 @@ INSERT INTO area (
     area_description,
     area_link,
     bng_hab_mgt,
-    bng_hab_creation,
-    local_funding_schemes
+    bng_hab_creation
 )
 SELECT DISTINCT
     area_id,
@@ -327,9 +331,8 @@ SELECT DISTINCT
     area_description,
     area_link,
     bng_hab_mgt,
-    bng_hab_creation,
-    local_funding_schemes
-FROM source_table
+    bng_hab_creation
+FROM read_csv('data/portal_upload/areas-tbl.csv', delim = ';')
 WHERE area_id IS NOT NULL;
 
 -- priority insert
@@ -354,7 +357,7 @@ SELECT DISTINCT
     grant_scheme,
     "url",
     grant_summary
-FROM source_table
+FROM read_csv('data/portal_upload/grants-tbl.csv', delim = ';')
 WHERE grant_id IS NOT NULL;
 
 -- measure types
@@ -362,14 +365,16 @@ WHERE grant_id IS NOT NULL;
 INSERT INTO measure_type BY NAME 
     (SELECT DISTINCT
     measure_type
-FROM source_table);
+FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';')
+WHERE measure_type IS NOT NULL);
     
 -- stakeholder insert
 
 INSERT INTO stakeholder BY NAME
     (SELECT DISTINCT
     stakeholder
-FROM source_table);
+FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';')
+WHERE stakeholder IS NOT NULL);
 
 FROM stakeholder;
 
@@ -379,7 +384,7 @@ INSERT INTO measure_has_type (measure_id, measure_type_id)
 SELECT DISTINCT
     s.measure_id,
     mt.measure_type_id
-FROM source_table s
+FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';') s
 JOIN measure m
     ON s.measure_id = m.measure_id
 JOIN measure_type mt
@@ -393,7 +398,7 @@ INSERT INTO measure_has_stakeholder (measure_id, stakeholder_id)
 SELECT DISTINCT
     s.measure_id,
     stkh.stakeholder_id
-FROM source_table s
+FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';') s
 JOIN measure m
     ON s.measure_id = m.measure_id
 JOIN stakeholder stkh
@@ -422,7 +427,7 @@ WHERE measure_id IS NOT NULL
 
 -- 6) Insert into measure_area_priority_grant (bridge for grants)
 -- Some measure–area–priority combos have an associated grant_id. Insert them here:
-
+-- don't add grants without a valid URL - no point in having them
 INSERT INTO measure_area_priority_grant (
     measure_id,
     area_id,
@@ -438,7 +443,10 @@ FROM source_table
 WHERE measure_id IS NOT NULL
   AND area_id IS NOT NULL
   AND priority_id IS NOT NULL
-  AND grant_id IS NOT NULL;
+  AND grant_id IS NOT NULL
+  AND url IS NOT NULL;
+
+
 
 -- 7) Insert into species
 
@@ -557,6 +565,7 @@ SELECT
     /* Measures */
     m.measure_id,
     m.measure,
+    m.concise_measure,
     --m.other_priorities_delivered,
     m.core_supplementary,
     m.mapped_unmapped,
@@ -576,7 +585,9 @@ SELECT
     a.area_link,
     a.bng_hab_mgt,
     a.bng_hab_creation,
-    a.local_funding_schemes,
+
+    /* Area Funding Schemes */
+    -- afs.local_funding_schemes,
 
     /* Priority */
     map.priority_id,
@@ -619,6 +630,9 @@ LEFT JOIN measure_area_priority_grant AS mag
 LEFT JOIN grant_table AS g
        ON mag.grant_id = g.grant_id;
 
+-- Area funding schemes - area can have multiple funding schemes
+-- FULL JOIN area_funding_schemes AS afs
+--        ON a.area_id = afs.area_id;
 
 
 SELECT COUNT(*) FROM source_table_recreated_vw;
@@ -672,6 +686,7 @@ SELECT
     , priority_id
     , biodiversity_priority
     , measure
+    , concise_measure
     , measure_id
     , link_to_further_guidance
     , grant_name
