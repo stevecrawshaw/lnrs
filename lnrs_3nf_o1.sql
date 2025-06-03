@@ -4,7 +4,7 @@
 -- The aim is to develop a neater process to edit and update source data, ie. add a new measure type, or stakeholder
 -- and recreate
 
--- rm data/lnrs_3nf_o1.duckdb
+rm data/lnrs_3nf_o1.duckdb
 
 duckdb
 
@@ -14,6 +14,12 @@ INSTALL HTTPFS;
 LOAD HTTPFS;
 INSTALL SPATIAL;
 LOAD SPATIAL;
+
+ATTACH 'https://github.com/stevecrawshaw/vs-code-setup/raw/refs/heads/main/m.db' AS m;
+
+-- (SELECT * FROM duckdb_functions() WHERE database_name = 'm' AND function_name = 'glimpse');
+
+-- SELECT * FROM m.glimpse(source_table);
 
 -- get the main table for the app data
 CREATE OR REPLACE TABLE source_table AS
@@ -173,8 +179,7 @@ CREATE OR REPLACE TABLE measure_area_priority_grant (
     measure_id  INTEGER NOT NULL,
     area_id     INTEGER NOT NULL,
     priority_id INTEGER NOT NULL,
-    grant_id    VARCHAR NOT NULL,
-    PRIMARY KEY (measure_id, area_id, priority_id, grant_id),
+    grant_id    VARCHAR,
     FOREIGN KEY (measure_id, area_id, priority_id)
         REFERENCES measure_area_priority (measure_id, area_id, priority_id),
     FOREIGN KEY (grant_id) REFERENCES grant_table(grant_id)
@@ -209,14 +214,9 @@ CREATE OR REPLACE TABLE area_geom(
 
 CREATE OR REPLACE TABLE area_funding_schemes(
     id INTEGER NOT NULL PRIMARY KEY,
-    local_funding_schemes VARCHAR NOT NULL
-);
--- NEEDS CHECKING
--- Bridge table to link areas with their funding schemes
-CREATE OR REPLACE TABLE area_funding_schemes (
-    id INTEGER NOT NULL,
     area_id INTEGER NOT NULL,
-    PRIMARY KEY (id, area_id),
+    area_name VARCHAR NOT NULL,
+    local_funding_schemes VARCHAR NOT NULL,
     FOREIGN KEY (area_id) REFERENCES area(area_id)
 );
 
@@ -369,11 +369,12 @@ FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';')
 WHERE measure_type IS NOT NULL);
     
 -- stakeholder insert
+DELETE FROM stakeholder; -- clear the table first
 
 INSERT INTO stakeholder BY NAME
     (SELECT DISTINCT
     stakeholder
-FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';')
+FROM source_table
 WHERE stakeholder IS NOT NULL);
 
 FROM stakeholder;
@@ -398,13 +399,15 @@ INSERT INTO measure_has_stakeholder (measure_id, stakeholder_id)
 SELECT DISTINCT
     s.measure_id,
     stkh.stakeholder_id
-FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';') s
+FROM source_table s
 JOIN measure m
     ON s.measure_id = m.measure_id
 JOIN stakeholder stkh
     ON s.stakeholder = stkh.stakeholder
 WHERE s.measure_id IS NOT NULL
   AND s.stakeholder IS NOT NULL;
+
+FROM measure_has_stakeholder;
 
 -- measure_area_priority insert
 
@@ -428,6 +431,7 @@ WHERE measure_id IS NOT NULL
 -- 6) Insert into measure_area_priority_grant (bridge for grants)
 -- Some measure–area–priority combos have an associated grant_id. Insert them here:
 -- don't add grants without a valid URL - no point in having them
+DELETE FROM measure_area_priority_grant; -- clear the table first
 INSERT INTO measure_area_priority_grant (
     measure_id,
     area_id,
@@ -443,8 +447,8 @@ FROM source_table
 WHERE measure_id IS NOT NULL
   AND area_id IS NOT NULL
   AND priority_id IS NOT NULL
-  AND grant_id IS NOT NULL
-  AND url IS NOT NULL;
+  AND (grant_id IN (SELECT grant_id FROM grant_table) OR grant_id IS NULL);
+
 
 
 
@@ -485,11 +489,13 @@ FROM read_parquet('data/lnrs-sub-areas.parquet');
 INSERT INTO area_funding_schemes (
     id,
     area_id,
+    area_name,
     local_funding_schemes
 )
 SELECT 
     id,
     area_id,
+    area_name,
     local_funding_schemes
 FROM read_csv('data/portal_upload/area-funding-schemes-tbl.csv', delim = ';');
 
@@ -586,9 +592,6 @@ SELECT
     a.bng_hab_mgt,
     a.bng_hab_creation,
 
-    /* Area Funding Schemes */
-    -- afs.local_funding_schemes,
-
     /* Priority */
     map.priority_id,
     p.biodiversity_priority,
@@ -630,13 +633,24 @@ LEFT JOIN measure_area_priority_grant AS mag
 LEFT JOIN grant_table AS g
        ON mag.grant_id = g.grant_id;
 
--- Area funding schemes - area can have multiple funding schemes
--- FULL JOIN area_funding_schemes AS afs
---        ON a.area_id = afs.area_id;
 
 
 SELECT COUNT(*) FROM source_table_recreated_vw;
 DESCRIBE FROM source_table_recreated_vw;
+
+SELECT * FROM m.glimpse(source_table_recreated_vw);
+
+-----------------------------TESTING THE NUMBERS-----------------------------
+SELECT * FROM m.glimpse(source_table);
+
+CREATE OR REPLACE VIEW test_vw AS
+SELECT DISTINCT measure_id, area_id, priority_id, COALESCE(grant_id, 'NULL') gid
+FROM source_table;
+
+COPY test_vw TO 'data/test_vw.csv' (DELIMITER ',', HEADER true);
+
+SELECT COUNT(*) FROM test_vw;
+
 
 SELECT * FROM source_table WHERE grant_id = 'CBG';
 
@@ -682,6 +696,7 @@ SELECT
     , measure_type
     , stakeholder
     , area_name
+    , area_id
     , grant_id
     , priority_id
     , biodiversity_priority
@@ -694,6 +709,8 @@ SELECT
 FROM source_table_recreated_vw;
 
 FROM apmg_slim_vw;
+
+SELECT * FROM m.glimpse(apmg_slim_vw);
 
 
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters

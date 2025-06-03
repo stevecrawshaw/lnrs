@@ -1,0 +1,359 @@
+<!-- lnrs-measures-priorities-grants-slim-->
+<ods-dataset-context context="areasgroupedtbl, areafundingschemestbl, apmg, focusareas, wecaboundary, lnrsspeciesarea, sssi, measures"
+                     areasgroupedtbl-dataset="lnrs-sub-areas-data"
+                     areafundingschemestbl-dataset="lnrs-area-funding-schemes-tbl-testing"
+                     apmg-dataset="apmg_slim_ods"
+                     focusareas-dataset="focus-areas-gridded"
+                     wecaboundary-dataset="weca-boundary-line"
+                     lnrsspeciesarea-dataset="species-area-tbl"
+                     sssi-dataset="sites-of-special-scientific-interest"
+                     measures-dataset="lnrs-measures"
+                     ng-init="speciesdrawer={}">
+    <div class="donotcopy-specific"
+         ng-init="donotcopy = {'simulaterefineonclick' : false}">
+        <div class="map-drawer-container"
+             ng-class="{'map-drawer-container--active': areasgroupedtbl.parameters['refine.area_name'],
+                       'map-drawer-container--active-full': drawer.status || speciesdrawer.status}"
+             ng-init="drawer = {'status':false}; speciesdrawer = {'status':false};">
+            <!--  this was in the dive before ng-class -->
+            <div class="map-drawer-container__map">
+                <div class="map-drawer-container__backdrop"
+                     ng-click="areasgroupedtbl.parameters['refine.area_name'] = undefined;
+                               apmg.parameters['refine.core_supplementary'] = undefined;
+                               apmg.parameters['refine.measure_type'] = undefined;
+                               apmg.parameters['refine.stakeholder'] = undefined;
+                               drawer.status = false;"
+                     ng-class="{'map-drawer-container__backdrop--active': areasgroupedtbl.parameters['refine.area_name']}">
+                </div>
+                <div ng-if="areasgroupedtbl.parameters['refine.area_name'] == undefined">
+                    <h2>
+                        Local Nature Recovery Toolkit: Select a Sub Area to see potential measures for nature recovery 
+                    </h2>
+                    <h3>
+                        <a href="https://experience.arcgis.com/experience/55ca9c7688e04336b86c01c2403d403c"
+                           target="_blank">
+                            View mapped measures for nature recovery
+                            <i class="fa fa-external-link"
+                               aria-hidden="true">
+                            </i>
+                        </a> 
+                    </h3>
+                </div>
+                <ods-pop-in
+                            name="intro-pop-in"
+                            title=""
+                            display-after="1"
+                            display-only-once="false">
+                    <br>
+                    <div style="text-align: center;">
+                        <h2>
+                            LNRS Toolkit 
+                        </h2>
+                        <br>
+                        Watch a 
+                        <a href="https://app.arcade.software/share/yGRR09o9gH89wmIlkom0" target="_blank">short video </a>
+                        to learn how to use it. <br>
+                        <br>
+                        Or go <a href="" ng-click="hidePopIn()">straight to the toolkit.</a>    
+                    </div>
+                </ods-pop-in>
+                <ods-map scroll-wheel-zoom="true"
+                         location="10,51.47716,-2.63609"
+                         basemap="mapbox.streets-satellite"
+                         toolbar-drawing="false"
+                         toolbar-fullscreen="false"
+                         search-box="true">
+                    <ods-map-layer context = "focusareas"
+                                   shape-opacity="0.5"
+                                   color="#93117F"
+                                   caption="false"
+                                   border-size=0
+                                   caption-title="Focus Areas for nature recovery"
+                                   exclude-from-refit="true">
+                    </ods-map-layer>
+                    <ods-map-layer context = "sssi"
+                                   shape-opacity="0.5"
+                                   color="#b38e2b"
+                                   caption="false"
+                                   border-size=0
+                                   caption-title="SSSI"
+                                   exclude-from-refit="true">
+                    </ods-map-layer>
+                    <ods-map-layer context="areasgroupedtbl"
+                                   display="raw"
+                                   shape-opacity="0.4"
+                                   color="#ED9899"
+                                   border-opacity="0.6"
+                                   border-color="grey"
+                                   caption="false"
+                                   refine-on-click-context="[areasgroupedtbl, areafundingschemestbl, apmg]"
+                                   refine-on-click-areasgroupedtbl-context-field="area_name"
+                                   refine-on-click-areasgroupedtbl-map-field="area_name"
+                                   refine-on-click-areasgroupedtbl-replace-refine="true"
+                                   refine-on-click-apmg-context-field="area_name"
+                                   refine-on-click-apmg-map-field="area_name"
+                                   refine-on-click-apmg-replace-refine="true"
+                                   refine-on-click-areafundingschemestbl-context-field="area_name"
+                                   refine-on-click-areafundingschemestbl-map-field="area_name"
+                                   refine-on-click-areafundingschemestbl-replace-refine="true"
+                                   exclude-from-refit="true"
+                                   >
+                    </ods-map-layer>
+                    <ods-map-layer context = "wecaboundary"
+                                   line-width="2"
+                                   color="#222222"
+                                   caption="false"
+                                   tooltip-disabled="false"
+                                   exclude-from-refit="true">
+                    </ods-map-layer>
+
+                    <div class="map-legend">
+                        <div ng-if="!drawer.status">
+                            <div>
+                                <i class="fa fa-square focusareapurple" aria-hidden="true"> </i>
+                                <strong ods-tooltip="Areas where action to recover nature will have the biggest impact">
+                                    Focus Areas for Nature Recovery
+                                </strong>    
+                            </div>
+                            <div>
+                                <i class="fa fa-square sssiyellow" aria-hidden="true"> </i>
+                                <strong ods-tooltip="Sites of Special Scientific Interest">
+                                    SSSI
+                                </strong>    
+                            </div>
+
+                        </div>
+                    </div>
+                </ods-map>
+
+                <!--ng-click="donotcopy.simulaterefineonclick = false" \ drawer.status = false -->
+            </div>
+
+            <div class="map-drawer-container__drawer map-drawer-container__drawer__partial" 
+                 ng-if="areasgroupedtbl.parameters['refine.area_name']"
+                 ng-class="{mobile:drawer.status}">
+                <div class="map-drawer-container__drawer__close"
+                     ng-click="areasgroupedtbl.parameters['refine.area_name'] = undefined;
+                               apmg.parameters['refine.core_supplementary'] = undefined;
+                               apmg.parameters['refine.measure_type'] = undefined;
+                               apmg.parameters['refine.stakeholder'] = undefined;
+                               drawer.status = false;">
+                    <!-- close the partial map drawer with the X top right -->
+                    <i class="fa fa-times"></i>
+                </div>
+                <div ods-adv-analysis="area"
+                     ods-adv-analysis-context="areasgroupedtbl"
+                     ods-adv-analysis-select="area_name, area_description, area_link"
+                     ods-adv-analysis-limit="1">
+                    <!-- Select One of the areas - there can be multiple polygons with the same ID -->
+                    <h2>
+                        Sub Area: {{area[0].area_name}}
+                    </h2>
+                    <dl>
+                        <dt>Description</dt>
+                        <dd class="description"
+                            ng-style="{'white-space': 'pre-line'}">
+                            <!-- ng-style converts line feeds /n to <br> -->
+                            {{area_desc=area[0].area_description}}
+                        </dd>
+                        <dt>Resources</dt>
+                        <dd ods-results="arealinks"
+                            ods-results-context="areafundingschemestbl"
+                            ods-results-max="10">
+                            <div class="theme-container">
+                                <div ng-repeat="record in arealinks" class="theme-box">
+                                    <a ng-href="{{ record.fields.local_funding_schemes }}" target="_blank">
+                                        Local funds
+                                        <i class="fa fa-external-link"
+                                           aria-hidden="true">
+                                        </i>
+                                    </a>
+                                </div>
+                                <div>
+                                    <span class="theme-box">
+                                        <a ng-href="{{area[0].area_link}}"
+                                           target="_blank"
+                                           ods-tooltip="Area Guidance" >
+                                            Other relevant guidance
+                                            <i class="fa fa-external-link"
+                                               aria-hidden="true">
+                                            </i>
+                                        </a>
+                                    </span>
+                                </div>
+                            </div>
+                        </dd>
+                    </dl>
+                    <div class="button-container">
+                        <div class="slanted-link"
+                             ng-click="drawer.status = !drawer.status"> <!--  -->
+                            Priorities and Measures
+                        </div>
+                        <div class="slanted-link"
+                             ng-click="speciesdrawer.status = !speciesdrawer.status;
+                                       drawer.status = false;
+                                       lnrsspeciesarea.parameters['refine.area_name']=area[0].area_name">
+                            Priority Species
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- start species -->
+            <div class="map-drawer-container__drawer  map-drawer-container__drawer__full" style="justify-content: center;" ng-if="speciesdrawer.status">
+                <div class="map-drawer-container__drawer__close"
+                     ng-click="speciesdrawer.status = false;">
+                    <i class="fa fa-times"></i>
+                </div>
+                <div class="theme-box-container" > 
+                    <ods-media-gallery 
+                                       context="lnrsspeciesarea"
+                                       style="height:100%"
+                                       displayed-fields="common_name, scientific_name, species_link"
+                                       ods-auto-resize
+                                       ods-widget-tooltip>
+                        <!--Can't get tooltip to appear here?   -->
+                        {{ getRecordTitle(record) }}
+                    </ods-media-gallery>
+                    <br>
+                    <div>
+                        <a class="slanted-link" href="{{lnrsspeciesarea.getDownloadURL('csv')}}">Download these species data</a> 
+                    </div>
+                </div>
+            </div>
+            <!-- end species -->
+
+            <div class="map-drawer-container__drawer map-drawer-container__drawer__full" ng-if="drawer.status">
+                <div class="map-drawer-container__drawer__close"
+                     ng-click="apmg.parameters['refine.core_supplementary'] = undefined;
+                               apmg.parameters['refine.measure_type'] = undefined;
+                               apmg.parameters['refine.stakeholder'] = undefined;
+                               drawer.status = false;">
+                    <!-- close the partial map drawer with the X top right -->
+                    <i class="fa fa-times"></i>
+                </div>
+
+                <div> <!-- stop the facet boxes from scrolling   class="sticky-content" -->
+                    <ods-facets context="apmg"> 
+                        <div class="box-container">
+                            <div class="column box-column"> 
+                                <ods-facet name="measure_type"
+                                           title="Measure Type"
+                                           disjunctive="true"><div ng-non-bindable>{{category.name}}</div>
+                                </ods-facet>
+                            </div>
+                            <div class="column box-column">
+                                <ods-facet name="core_supplementary"
+                                           title="Status"
+                                           disjunctive="true"
+                                           ods-tooltip="'Core' measures relate to key habitats and species; 'Core (BNG)' measures receive 15% BNG uplift in mapped focus areas"><div ng-non-bindable>{{category.name}}</div>
+                                </ods-facet>
+                            </div> 
+                            <div class="column box-column"> 
+                                <ods-facet name="stakeholder"
+                                           title="Stakeholder"
+                                           disjunctive="true"><div ng-non-bindable>{{category.name}}</div>
+                                </ods-facet>
+                            </div> 
+                        </div>
+                        <div class="slanted-link"
+                             ng-click="apmg.parameters['refine.core_supplementary'] = undefined;
+                                       apmg.parameters['refine.measure_type'] = undefined;
+                                       apmg.parameters['refine.stakeholder'] = undefined;">
+                            Clear filters
+                        </div>
+                    </ods-facets>
+                </div>
+                <div ng-if="apmg.parameters['refine.core_supplementary'] || apmg.parameters['refine.measure_type'] || apmg.parameters['refine.stakeholder'];"
+                     class="fillwide"
+                     ng-init="selectedMeasure = null; showMeasurePopin = false;">
+                    <!-- code below runs when filter(s) applied -->
+                    <!--The grantarray ods-analysis checks to see if there are grants and turns off the grants column in the table if there are none -->
+                    <div class="theme-box-container column fillwide"
+                         ods-adv-analysis="grantarray"
+                         ods-adv-analysis-context="apmg"
+                         ods-adv-analysis-group-by="grant_id"
+                         ng-init="{{grantsExist = grantarray.length > 0}}">
+                        <div ods-adv-analysis="measuresgrants"
+                             ods-adv-analysis-context="apmg"
+                             ods-adv-analysis-group-by="priority_id, biodiversity_priority, measure, concise_measure, measure_id, link_to_further_guidance"
+                             ods-adv-analysis-order-by="priority_id">
+                            <div class="table-module">
+                                <div class="table-container">
+                                    <table class="table-basic">
+                                        <tbody> 
+                                            <thead>
+                                                <tr  class="kpi-value">
+                                                    <th ods-tooltip="Hover over measures to see the priority">Measure: Action to implement the priority</th>
+                                                    <th ng-if="grantsExist"
+                                                        ods-tooltip="If blank there is no grant available">Grants</th>
+                                                </tr>
+                                            </thead>
+                                            <tr ng-repeat="record in measuresgrants">
+                                                <!-- td>{{ record['biodiversity_priority']}}</td -->
+                                                <td>
+                                                    <span ods-tooltip="PRIORITY: {{ record['biodiversity_priority']}}">
+                                                        <a href="" ng-click="selectedMeasure = record; showMeasurePopin = true; $event.preventDefault();">
+                                                            {{ record.concise_measure }} <i aria-hidden="true"></i>
+                                                        </a>
+                                                        <div class="pop-in-card" ng-show="showMeasurePopin">
+                                                            <button class="pop-in-clear-button" ng-click="showMeasurePopin = false;">
+                                                                <i class="fa fa-times"></i>
+                                                            </button>
+                                                            <div class="pop-in-header">
+                                                                <p class="pop-in-title">{{ selectedMeasure.measure }}</p>
+                                                            </div>
+                                                            <div ods-adv-analysis="md"
+                                                                 ods-adv-analysis-context="measures"
+                                                                 ods-adv-analysis-select="species, benefits, measure_id"
+                                                                 ods-adv-analysis-where="measure_id = '{{selectedMeasure.measure_id}}'">
+                                                                <div class="details-columns-container">
+                                                                    <div class="details-column">
+                                                                        <h4>Priority species that benefit:</h4>
+                                                                        <p ng-style="{'white-space': 'pre-line'}">{{ md[0]['species'] }}</p>
+                                                                    </div>
+                                                                    <div class="details-column">
+                                                                        <h4>Other benefits:</h4>
+                                                                        <p ng-style="{'white-space': 'pre-line'}">{{ md[0]['benefits'] }}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="button-container">
+                                                                <a class="slanted-link"
+                                                                   ng-href="{{ selectedMeasure.link_to_further_guidance }}"
+                                                                   target="_blank">
+                                                                    Open Guidance
+                                                                    <i class="fa fa-external-link"
+                                                                       aria-hidden="true">
+                                                                    </i>
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </span>
+                                                </td>
+                                                <!-- In where clause below use exact match to measure_id rather than measure as this seems ambiguous if measure is used   -->
+                                                <td ng-if="grantsExist">
+                                                    <div ods-adv-analysis="linkgrants"
+                                                         ods-adv-analysis-context="apmg"
+                                                         ods-adv-analysis-group-by="grant_id, grant_name, url"
+                                                         ods-adv-analysis-where="measure_id = '{{record['measure_id']}}'"
+                                                         ods-adv-analysis-order-by="grant_id">
+                                                        <a ng-repeat="link in linkgrants"
+                                                           ng-href="{{ link.url }}"
+                                                           target="_blank"
+                                                           ods-tooltip="{{link.grant_name}}">
+                                                            {{link.grant_id}} <br>
+                                                        </a>
+                                                    </div>   
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</ods-dataset-context>
