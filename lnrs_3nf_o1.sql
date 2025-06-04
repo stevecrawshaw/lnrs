@@ -21,10 +21,13 @@ ATTACH 'https://github.com/stevecrawshaw/vs-code-setup/raw/refs/heads/main/m.db'
 
 -- SELECT * FROM m.glimpse(source_table);
 
--- get the main table for the app data
+-- get the main table for the app data. This captures the key relationships between
+-- measures, areas, priorities, and grants.
+-- This is the table that will be used to create the views for the app.
+-- it is recreated in source_table_recreated_vw
 CREATE OR REPLACE TABLE source_table AS
 SELECT * 
-FROM read_parquet('data/area-measures-tbl.parquet');
+FROM read_csv('data/portal_upload/area-measures-tbl.csv', delim = ';');
 
 -- get tables for species and how they relate to areas and priorities
 
@@ -317,6 +320,8 @@ SELECT DISTINCT
     concise_measure
 FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';');
 
+SELECT * FROM m.glimpse(measure);
+
 INSERT INTO area (
     area_id,
     area_name,
@@ -334,6 +339,8 @@ SELECT DISTINCT
     bng_hab_creation
 FROM read_csv('data/portal_upload/areas-tbl.csv', delim = ';')
 WHERE area_id IS NOT NULL;
+
+SELECT * FROM m.glimpse(area);
 
 -- priority insert
 
@@ -360,13 +367,17 @@ SELECT DISTINCT
 FROM read_csv('data/portal_upload/grants-tbl.csv', delim = ';')
 WHERE grant_id IS NOT NULL;
 
+SELECT * FROM m.glimpse(grant_table);
+
 -- measure types
 
 INSERT INTO measure_type BY NAME 
     (SELECT DISTINCT
     measure_type
-FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';')
+FROM source_table
 WHERE measure_type IS NOT NULL);
+
+FROM measure_type;
     
 -- stakeholder insert
 DELETE FROM stakeholder; -- clear the table first
@@ -380,12 +391,13 @@ WHERE stakeholder IS NOT NULL);
 FROM stakeholder;
 
 -- has measure type insert
+DELETE FROM measure_has_type; -- clear the table first
 
 INSERT INTO measure_has_type (measure_id, measure_type_id)
 SELECT DISTINCT
     s.measure_id,
     mt.measure_type_id
-FROM read_csv('data/portal_upload/measures-tbl.csv', delim = ';') s
+FROM source_table s
 JOIN measure m
     ON s.measure_id = m.measure_id
 JOIN measure_type mt
@@ -393,6 +405,11 @@ JOIN measure_type mt
 WHERE s.measure_id IS NOT NULL
   AND s.measure_type IS NOT NULL;
 
+FROM measure_has_type;
+
+SELECT COUNT(*) FROM measure_has_type;
+
+FROM m.glimpse(measure_has_type);
 -- measure has stakeholder insert
 
 INSERT INTO measure_has_stakeholder (measure_id, stakeholder_id)
@@ -636,60 +653,15 @@ LEFT JOIN grant_table AS g
 
 
 SELECT COUNT(*) FROM source_table_recreated_vw;
+SELECT COUNT(*) FROM source_table;
 DESCRIBE FROM source_table_recreated_vw;
 
-SELECT * FROM m.glimpse(source_table_recreated_vw);
+FROM m.glimpse(source_table_recreated_vw);
 
 -----------------------------TESTING THE NUMBERS-----------------------------
 SELECT * FROM m.glimpse(source_table);
 
-CREATE OR REPLACE VIEW test_vw AS
-SELECT DISTINCT measure_id, area_id, priority_id, COALESCE(grant_id, 'NULL') gid
-FROM source_table;
-
-COPY test_vw TO 'data/test_vw.csv' (DELIMITER ',', HEADER true);
-
-SELECT COUNT(*) FROM test_vw;
-
-
-SELECT * FROM source_table WHERE grant_id = 'CBG';
-
--- testing why there are fewer rows in the recreated table
--- compared to the source table
--- it is because the recreated table elides rows where a grant ID
--- is NULL but all other  unique identifiers exist
-
--- needs to be tested in the TEST app
--- also lets try removing all unused fields from the dataset as it is only used for the app
-
-CREATE OR REPLACE VIEW source_table_distinct_vw AS
-SELECT measure_id, priority_id, grant_id, measure_type, stakeholder 
-FROM source_table st
--- INNER JOIN source_table_recreated str
--- USING (measure_id, priority_id, area_id)
-WHERE st.area_id = 15;
-
-
-CREATE OR REPLACE VIEW source_table_recreated_distinct_vw AS
-SELECT measure_id, priority_id, grant_id, measure_type, stakeholder 
-FROM source_table_recreated_vw str
--- INNER JOIN source_table_recreated str
--- USING (measure_id, priority_id, area_id)
-WHERE str.area_id = 15;
-
-SELECT * FROM source_table_distinct_vw;
-
-(   SELECT * FROM source_table_distinct_vw
-    EXCEPT
-    SELECT * FROM source_table_recreated_distinct_vw)  
-UNION ALL
-(   SELECT * FROM source_table_recreated_distinct_vw
-    EXCEPT
-    SELECT * FROM source_table_distinct_vw); 
-
--- a revised version of the area-measures-tbl which keeps only the fields
--- necessary for the app
-
+-- Create a slimmed down view for the app
 CREATE OR REPLACE VIEW apmg_slim_vw AS
 SELECT
     core_supplementary
@@ -710,7 +682,7 @@ FROM source_table_recreated_vw;
 
 FROM apmg_slim_vw;
 
-SELECT * FROM m.glimpse(apmg_slim_vw);
+FROM m.glimpse(apmg_slim_vw);
 
 
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters

@@ -497,6 +497,7 @@ area_measures_slim_tbl <- area_measures_tbl |>
          measure_type,
          stakeholder,
          area_name,
+         area_id,
          grant_id,
          priority_id,
          biodiversity_priority,
@@ -798,6 +799,9 @@ measures_tbl <- measures_no_benefits_tbl |>
 # 
 # measures_concise_tbl |> 
 #   write_xlsx("data/measures_concise.xlsx")
+#   
+area_measures_tbl |> filter(area_id < 5) |> 
+  write_csv("data/gemini-area-measures-tbl.csv", na = "")
 
 
 # Write Data ----
