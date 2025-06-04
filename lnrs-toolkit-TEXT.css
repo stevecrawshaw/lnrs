@@ -1,0 +1,623 @@
+/* TEMPLATE */
+:root {
+    --drawer-width: 480px;
+    --map-width: calc(100% - var(--drawer-width));
+    --backdrop-width-when-modal-active: 75px;
+    --drawer-background-color: white;
+    --boxes-radius: 6px;
+}
+
+.odswidget-media-gallery {
+    min-width:700px;
+    width:max-content}
+
+.map-drawer-container {
+    display: flex;
+    width: auto;
+    flex-direction: column-reverse;
+    position: relative;
+    overflow: hidden;
+    height: -webkit-fill-available;
+}
+
+
+/* */
+.map-drawer-container__map {
+    position:relative;
+    width: -webkit-fill-available;
+    height: 100vh;
+
+}
+.map-drawer-container__info {
+    width: var(--drawer-width);
+}
+/* BACKDROP (black screen when modal active) */
+.map-drawer-container__backdrop {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    z-index: 9;
+    background-color: #fff;
+    cursor: default;
+    -webkit-transition: visibility .5s,opacity .5s;
+    transition: visibility .5s,opacity .5s;
+}
+.map-drawer-container__backdrop--active {
+    visibility: visible;
+    opacity: .15; /* make a more or less darker backdrop, 1:totally dark, 0:totally transparent (invisibile) */
+}
+.map-drawer-container__drawer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: var(--drawer-background-color);
+    overflow: hidden;
+    transition: 0.3s;
+
+}
+.map-drawer-container__drawer__partial {
+    overflow: hidden;
+    right: calc(-1 * var(--drawer-width));
+    width: var(--drawer-width);
+    z-index: 11;
+
+}
+.map-drawer-container__drawer__full {
+    overflow: auto;
+    right: calc(-1 * var(--map-width));
+    width: calc(var(--map-width) - var(--backdrop-width-when-modal-active));
+    z-index: 10;
+    margin: 10px;
+}
+
+.map-drawer-container__drawer__close {
+    position: absolute;
+    top: 0px;
+    right: 8px;
+    font-size: 1.5em;
+}
+/* active state partial drawer */
+.map-drawer-container--active .map-drawer-container__drawer__partial {
+    right: 0;
+    overflow: auto;
+}
+
+/* active state full drawer */
+.map-drawer-container--active-full .map-drawer-container__drawer__full {
+    right: var(--drawer-width);
+}
+/* DO NOT COPY */
+.donotcopy-specific .map-drawer-container {
+    display: flex;
+    height: -webkit-fill-available;
+    text-align: center;
+}
+.donotcopy-specific .map-drawer-container__info,
+.donotcopy-specific .map-drawer-container__drawer__partial,
+.donotcopy-specific .map-drawer-container__drawer__full {
+    padding: 10px;
+    margin: 0;
+}
+.donotcopy-specific .map-drawer-container__map {
+    background-color: #ffffff;
+}
+.donotcopy-specific .map-drawer-container__info {
+    background-color: #ffffff;
+}
+/* was lightgreen*/
+.donotcopy-specific .map-drawer-container__drawer__partial {
+    background-color: #ffffff;
+    width:auto;
+    max-width:450px;
+    overflow: auto;
+}
+/* was lightpink*/
+.donotcopy-specific .map-drawer-container__drawer__full {
+    background-color: #ffffff;
+}
+.donotcopy-specific h1, .donotcopy-specific h2 {
+}
+/* KPI----------------*/
+.kpi-value {
+    color: #142E7B;
+    font-size: 2rem;
+    font-weight: 400;
+    margin: 0;
+}
+
+/* Columns */
+
+.column {
+    flex: 1;
+    padding: 10px; /* Adjust padding as needed */
+    border: 1px solid #ccc; /* Optional border */
+    margin: 5px; /* Space between columns */
+}
+
+.box-column{
+    min-width: 200px;
+}
+
+/* UL formatting ------------------------ */
+
+ol, ul {
+
+    list-style-type: disc;      /* Type of bullet point */
+    list-style-position: inside; /* Position of bullet inside the list content */
+    padding-left: 0;            /* Remove default padding */
+    margin-left: 0;             /* Aligns the list to the left edge of its container */
+    overflow-y: auto;
+}
+
+li {
+    text-align: left;           /* Ensures text within list items is aligned left */
+}
+
+
+/* Table Module Basic
+========================================================================== */
+.table-module {
+    flex: 1; /* Takes up available space */
+    height: -webkit-fill-available;
+    min-height: 300px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.table-basic {
+    display: table;
+    border-collapse: collapse;
+    width: 100%;
+    overflow-y: auto;
+    white-space: normal; /* Change to 'normal' to allow text wrapping */
+    background-color: transparent; /* Change to 'transparent' for transparent background */
+}
+
+
+.table-basic thead th {
+    position: sticky !important;
+    color: var(--titles);
+    font-weight: 500;
+    top: 0;
+    z-index: 2;
+    background-color: #ffffff;
+    border-bottom: 2px solid #ccc;
+    padding: 13px 3px;
+}
+
+
+.table-basic thead th:first-child,
+.table-basic tbody th {
+    padding-left: 13px;
+}
+
+.table-basic tbody th {
+    font-weight: normal;
+    border-top: 1px solid #dee5ef;
+}
+
+.table-basic tr td {
+    padding: 13px 13px;
+    white-space: normal;
+    border-bottom: 1px solid #eee;
+    /* Add word-break property to ensure words can break and wrap to the next line */
+    /* word-break: break-word;*/
+}
+
+.table-container {
+    /*  max-height: 400px;  Adjust as needed */
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Dashboard layout css -----------------------------------*/
+
+body, main {
+    margin: 0;
+    background-color: #F2F3F8;
+}
+
+h2 {
+    color: #354753;
+    font-size: 2rem;
+    font-weight: 400;
+    margin: 0;
+}
+
+.box {
+    position: relative;
+    padding: 13px;
+}
+.box.white {
+    background-color: white;
+}
+.box.flat {
+    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.16);
+    border-radius: var(--boxes-radius);
+}
+
+@keyframes bounce {
+    from {
+        margin-left: 6px;
+        margin-right: 0;
+    }
+    50% {
+        margin-left: 2px;
+        margin-right: 4px;
+    }
+    to {
+        margin-left: 6px;
+        margin-right: 0;
+    }
+}
+
+
+/* */
+.description{
+    max-height: 300px;
+    overflow: auto;
+}
+
+
+.box-container{
+    display:flex;
+    flex-wrap: wrap;
+    padding: 0 30px;
+    width: min-content;
+}
+
+.ods-box{
+    height: -webkit-fill-available;
+    margin: 0;
+    padding:30px
+}
+
+.theme-box-container{
+    display: flex;
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    margin: 0;
+}
+
+.theme-box{
+    background-color: #ccd5f333;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+.theme-box-container-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-direction: row; /* Change from column to row */
+    margin: 0;
+    justify-content: space-between; /* This will give equal spacing */
+}
+
+.theme-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+/*Priority and mesure*/
+/* table */
+.fillwide {
+    width: auto;
+    margin: 2px;
+    height: -webkit-fill-available;
+    overflow: auto;
+    display: flex;
+    justify-content: flex-start;
+}
+/*filters number*/
+.odswidget-facet__category-count {
+    display:none}
+
+/*List*/
+dt {
+    text-align: left;
+}
+
+dd {
+    text-align: left;
+    padding-left: 20px;
+    margin-bottom:10px;
+}
+
+
+
+.area-div {
+    height: 650px;
+}
+/*Mobile version */
+.mobile{
+    display:flex
+}
+
+/* Pop-in
+========================================================================== */
+
+.pop-in-clear-button {
+    font-size: 1.3em;
+    color: #0f0f0f;
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    border: none;
+    background: none;
+    z-index: 1;
+}
+.pop-in-clear-button:hover {
+    color: #09357a;
+}
+.pop-in-card {
+    z-index: 102;
+    height: auto;
+    min-width: 300px;
+    background-color: #f5f7fa; /* Background color of card */
+    color: var(--text);
+    padding: 26px;
+    margin: 0 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all .2s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.pop-in-header {
+    margin-bottom: 20px;
+}
+.pop-in-title {
+    font-size: 1rem;
+    color: #1F1F1F;
+    font-weight: normal;
+    margin-top: 17px !important;
+    margin-bottom: 10px;
+}
+.pop-in-subtitle {
+    font-size: 1rem;
+    margin: 4px 0;
+    text-transform: uppercase;
+    font-weight: normal;
+    border-radius: 4px;
+    margin: 0;
+    display: inline-block;
+}
+.pop-in-list dt {
+    color: #6f6f6f;
+}
+
+@media only screen and  (max-width:800px){
+    :root {
+        --drawer-width: auto;
+        --map-width: calc(100% - var(--drawer-width));
+        --backdrop-width-when-modal-active: 75px;
+        --drawer-background-color: white;
+        --boxes-radius: 6px;
+    }
+
+    .map-drawer-container {
+        display: flex;
+    }
+    .mobile{
+        display:none
+    }
+    .map-drawer-container__drawer__full{
+        width: -webkit-fill-available;
+
+    }
+}
+
+.button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* This will center the button horizontally */
+}
+
+.ods-button {
+    margin-bottom: 10px; /* Adds some space between the buttons */
+    text-align: center;
+}
+
+ods-slideshow {
+    flex: 0 0 500px; /* This keeps the slideshow at 500px width */
+}
+
+
+/* Styles for side-by-side species and benefits display in pop-in */
+.details-columns-container {
+    display: flex; /* Enables flexbox layout */
+    justify-content: space-between; /* Distributes space between columns, or use 'flex-start' to pack them to the left */
+    gap: 20px; /* Adds a 20px gap between the columns. Adjust as needed. */
+    margin-top: 15px; /* Optional: Adds some space above this section */
+    margin-bottom: 15px; /* Optional: Adds some space below this section */
+}
+
+.details-column {
+    flex: 1; /* Allows each column to take up equal space. */
+    /* If you want one column to be wider than the other, you can adjust the flex value, e.g., flex: 2 for one and flex: 1 for the other. */
+    /* Or, you can set a specific width or flex-basis if needed: */
+    /* flex-basis: 48%; */ /* Example: for roughly half width with gap */
+}
+
+.details-column h4 {
+    margin-top: 0; /* Removes default top margin from h4 if it's too much */
+    /* Add any other styling for your headers here if needed */
+}
+
+.details-column p {
+    /* Add styling for your paragraphs here if needed */
+    /* The ng-style for white-space is good for preserving line breaks. */
+}
+
+/*MAP */
+
+@media only screen and  (min-width:800px){
+    .map-drawer-container__drawer__full {
+        display:flex;
+        width: -webkit-fill-available;
+    }
+}
+.map-legend {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    border-right-color: rgb(229, 229, 229);
+    border-right-width: 5px;
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 2px 2px 10px #868585;
+    padding: 5px 10px;
+    text-align: left;
+}
+
+.focusareapurple {
+    color: #93117F;
+}
+
+.sssiyellow {
+    color: #b38e2b;
+}
+
+.odswidget-map {
+    height:100%;
+}
+.odswidget-map__map {
+    height: 100%;
+}
+
+.ods-slideshow__image-wrapper {
+    position: relative;
+    background-color: #fff !important;
+}
+
+ods-media-gallery {
+    flex: 1;
+    min-height: 500px;
+    width: 100%;
+    display: block;
+    overflow: auto;
+}
+
+@media only screen and  (max-height: 600px) {
+    .odswidget-map {
+        height:-webkit-fill-available;
+        min-height:450px
+    }
+
+    .odswidget-map__map {
+        height: 100%;
+        min-height:450px
+
+    }
+}
+
+
+.slanted-link, .odswidget-select-button {
+    margin-top: 18px;
+    display: inline-block;
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    background: linear-gradient(to right, #d9edd9 50%, #ffffff 50%);
+    background-size: 200% 100%;
+    background-position: right bottom;
+    border: 1px solid rgb(64, 168, 50);
+    border-radius: 28px;
+    color: #13301b;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 120%;
+    padding: 12px 24px;
+    text-decoration: none;
+    min-width: 0;
+    margin-right: 12px; 
+    margin-bottom: 12px;
+    transition: background-position 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.slanted-link:hover {
+    background-position: left bottom;
+    border-color: #13301b;
+    text-decoration: none !important;
+}
+
+.odswidget-select-input-container {
+    border: 0px;
+}
+
+
+/* Style for the smaller buttons in the area links part  */
+
+.center-container {
+    width: 30%;
+    margin: 50px auto 0 auto;
+}
+
+
+@media only screen and  (max-height: 700px) {
+    .odswidget-map {
+        height:-webkit-fill-available;
+        min-height:550px
+    }
+
+    .odswidget-map__map {
+        height: 100%;
+        min-height:550px
+
+    }
+}
+
+
+@media only screen and(max-height: 850px) {
+    .odswidget-map {
+        height:-webkit-fill-available;
+        min-height: 700px;
+    }
+
+    .odswidget-map__map {
+        height: 100%;
+        min-height: 700px;
+    }
+}
+@media only screen and(max-height: 1000px) {
+    .odswidget-map {
+        height:-webkit-fill-available;
+        min-height: 850px;
+    }
+
+    .odswidget-map__map {
+        height: 100%;
+        min-height: 850px;
+    }
+}
+@media only screen and(max-height: 1200px) {
+    .odswidget-map {
+        height:-webkit-fill-available;
+        min-height: 1050px;
+    }
+
+    .odswidget-map__map {
+        height: 100%;
+        min-height: 1050px;
+    }
+}
+/* Responsive layout for mobile screens */
+@media (max-width: 768px) {
+    .theme-box-container {
+        flex-direction: column;
+    }
+
+    ods-slideshow {
+        width: 100% !important;
+        flex: none;
+    }
+}
