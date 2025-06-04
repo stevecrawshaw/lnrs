@@ -2,6 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+.venv
+.Rproj
+.git
 /data
 /plots
-r-code-test.R
+/archive
+
