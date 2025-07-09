@@ -688,6 +688,14 @@ FROM m.glimpse(apmg_slim_vw);
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters
 COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
 
+
+-- EXPORT TO MOTHERDUCK
+
+ATTACH 'md:';
+
+CREATE OR REPLACE DATABASE lnrs_weca FROM lnrs;
+
+
 -- Now we need a process to update (edit) the values in the individual tables
 -- and then update the source_table_recreated view
 

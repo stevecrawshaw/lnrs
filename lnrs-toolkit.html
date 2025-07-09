@@ -150,40 +150,41 @@
                         Sub Area: {{area[0].area_name}}
                     </h2>
                     <dl>
-                        <dt>Description</dt>
+                        <dt><strong>Description</strong></dt>
                         <dd class="description"
                             ng-style="{'white-space': 'pre-line'}">
                             <!-- ng-style converts line feeds /n to <br> -->
                             {{area_desc=area[0].area_description}}
                         </dd>
-                        <dt>Resources</dt>
-                        <dd ods-results="arealinks"
+                        <dt><strong>Resources</strong></dt>
+                        </dl>
+                        <div ods-results="arealinks"
                             ods-results-context="areafundingschemestbl"
                             ods-results-max="10">
                             <div class="theme-container">
-                                <div ng-repeat="record in arealinks" class="theme-box">
-                                    <a ng-href="{{ record.fields.local_funding_schemes }}" target="_blank">
-                                        Local funds
+                                <div ng-repeat="record in arealinks">
+                                    <a class="slanted-link-small" ng-href="{{ record.fields.local_funding_schemes }}" target="_blank">
+                                        Funding
                                         <i class="fa fa-external-link"
                                            aria-hidden="true">
                                         </i>
                                     </a>
                                 </div>
                                 <div>
-                                    <span class="theme-box">
-                                        <a ng-href="{{area[0].area_link}}"
+                                    
+                                        <a class="slanted-link-small" ng-href="{{area[0].area_link}}"
                                            target="_blank"
                                            ods-tooltip="Area Guidance" >
-                                            Other relevant guidance
+                                            Guidance
                                             <i class="fa fa-external-link"
                                                aria-hidden="true">
                                             </i>
                                         </a>
-                                    </span>
+                                    
                                 </div>
                             </div>
-                        </dd>
-                    </dl>
+                        </div>
+                    <div class="separator-div"></div>
                     <div class="button-container">
                         <div class="slanted-link"
                              ng-click="drawer.status = !drawer.status"> <!--  -->

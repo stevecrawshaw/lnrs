@@ -9,7 +9,8 @@
 
 .odswidget-media-gallery {
     min-width:700px;
-width:max-content}
+width:max-content
+}
 
 .map-drawer-container {
     display: flex;
@@ -333,8 +334,16 @@ dd {
     text-align: left;
     padding-left: 20px;
     margin-bottom:10px;
+    margin-inline-start: 0px;
 }
 
+/* Styling the separator div */
+.separator-div {
+  width: 70%; /* Adjust width as needed */
+  height: 1px; /* The thickness of the line */
+  background-color: #13301b; /* The color of the line */
+  margin: 25px auto; /* Vertical spacing and centering */
+}
 
 
 .area-div {
@@ -526,6 +535,35 @@ ods-media-gallery {
     }
 }
 
+.slanted-link-small {
+    margin-top: 5px;
+    display: inline-block;
+  width: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+    background: linear-gradient(to right, #d9edd9 50%, #ffffff 50%);
+    background-size: 200% 100%;
+    background-position: right bottom;
+    border: 1px solid rgb(64, 168, 50);
+    border-radius: 14px;
+    color: #13301b;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 120%;
+    padding: 6px 12px;
+    text-decoration: none;
+    min-width: 0;
+    margin-right: 6px; 
+    margin-bottom: 6px;
+    transition: background-position 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+
+.slanted-link-small:hover {
+    background-position: left bottom;
+    border-color: #13301b;
+    text-decoration: none !important;
+  }
 
 .slanted-link {
     margin-top: 18px;

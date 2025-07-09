@@ -1,20 +1,5 @@
 .First <- function() {
-  path_to_libraries <- "C:\\Users\\steve.crawshaw\\AppData\\Local\\Programs\\R\\R-Library" # REPLACE <username> with your user folder!
+  path_to_libraries <- "C:\\Users\\steve.crawshaw\\AppData\\Local\\Programs\\R\\R-4.5.0\\library" # REPLACE <username> with your user folder!
   .libPaths(c(path_to_libraries, .libPaths()))
 }
 
-
-
-weca_core_colours <- c(
-  "Dark Blue" = "#354753",
-  "Blue" = "#6bd4f2",
-  "Pink" = "#ed749d",
-  "Yellow" = "#ffd900",
-  "Green" = "#79decc")
-
-weca_muted_colours <- c(
-  "Muted Blue" = "#96bbc8",
-  "Muted Pink" = "#daa3ae",
-  "Muted Yellow" = "#cebe83",
-  "Muted Green" = "#a0bbaf"
-)
