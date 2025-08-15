@@ -1,11 +1,4 @@
-pacman::p_load(tidyverse,
-               glue,
-               janitor,
-               fs,
-               rgbif,
-               config,
-               yaml
-               )
+pacman::p_load(tidyverse, glue, janitor, fs, rgbif, config, yaml)
 
 gbif_creds <- config::get(file = "../config.yml", config = "gbif")
 
@@ -28,10 +21,12 @@ taxons <- pred_in("taxonKey", keys)
 
 payload <- pred_and(years, area, taxons)
 # get the ID
-dl_key <- occ_download(payload,
-                       user = gbif_creds$user,
-                       pwd = gbif_creds$pwd, 
-                       email = gbif_creds$email)
+dl_key <- occ_download(
+  payload,
+  user = gbif_creds$user,
+  pwd = gbif_creds$pwd,
+  email = gbif_creds$email
+)
 
 dl_id <- yaml.load(dl_key)
 
@@ -40,28 +35,43 @@ dl_key
 # see how long..
 occ_download_wait(dl_id)
 # download
-species_gbif_tbl <- occ_download_get(dl_id, overwrite = TRUE) %>% 
-    occ_download_import()
+species_gbif_tbl <- occ_download_get(dl_id, overwrite = TRUE) %>%
+  occ_download_import()
 # inspect
-species_gbif_tbl %>% 
+species_gbif_tbl %>%
   glimpse()
 
 species_gbif_tbl$usage
 # clean it
-ods_species_tbl <- species_gbif_tbl %>% 
-  select(modified,
-         license,
-         rightsHolder,
-         institutionCode,
-         sex, 
-         lifeStage, 
-         eventDate, year, verbatimLocality, latitude = decimalLatitude,
-         longitude = decimalLongitude, scientificName, kingdom, phylum, class,
-         order, family, genericName, lastInterpreted, taxonKey, species, level3Name)
+ods_species_tbl <- species_gbif_tbl %>%
+  select(
+    modified,
+    license,
+    rightsHolder,
+    institutionCode,
+    sex,
+    lifeStage,
+    eventDate,
+    year,
+    verbatimLocality,
+    latitude = decimalLatitude,
+    longitude = decimalLongitude,
+    scientificName,
+    kingdom,
+    phylum,
+    class,
+    order,
+    family,
+    genericName,
+    lastInterpreted,
+    taxonKey,
+    species,
+    level3Name
+  )
 
 unique(ods_species_tbl$license)
 
 # write
-ods_species_tbl %>% 
-  clean_names() %>% 
+ods_species_tbl %>%
+  clean_names() %>%
   write.csv2("data/lnrs_species_occ_gbif_tbl.csv", row.names = FALSE, na = "")
