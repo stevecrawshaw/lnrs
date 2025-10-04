@@ -703,7 +703,7 @@ CREATE OR REPLACE DATABASE lnrs_weca FROM lnrs;
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
--- CRUD OPEARATION ON THE TABLES
+-- CRUD OPEARATION ON THE TABLES EXAMPLES
 ----------------------------------------------------------------
 
 -- 1. Update Operations
