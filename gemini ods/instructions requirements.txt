@@ -1,0 +1,28 @@
+Requirements for new functionality to describe Measures
+
+We wish to change the way the app works in relation to the behaviour when a user clicks a Measure. Measures are actions that a landowner can take to improve land and help nature recover.
+Current Operation
+From the opening of the app, a user clicks on the map. This opens a dialog where the user then clicks on the “Priorities and Measures” button. This opens a dialog where the user can filter on Measure Type, Status and Stakeholder. In the filtered table that appears, a Measure can be clicked to directly open an external page in a new tab which gives guidance on the Measure selected. This is the relevant section of code:
+
+<td>
+ <span ods-tooltip="PRIORITY: {{ record['biodiversity_priority']}}">
+               <a ng-href="{{record.link_to_further_guidance}}" target="_blank">
+                                                                {{ record.measure }}
+                  <i class="fa fa-external-link"   aria-hidden="true"></i>
+                </a>
+</span>
+</td>
+
+Problem
+The user doesn’t know where the link will take them, the user also doesn’t know what species this Measure will benefit or what other co – benefits will arise from implementing this Measure. 
+
+Enhanced Functionality
+
+Instead of simply opening another page in a new tab, it would be better to have a pop-in that shows:
+1.	The species that would benefit from the measure
+2.	The other benefits that would arise from implementing the measure
+3.	A button that would open the guidance in a new tab so the user can understand more
+4.	A button to close the pop in
+
+Implementation
+The key dataset driving the app is lnrs-measures-priorities-grants-slim. The data about species affected by a measure and benefits associated with a measure are in the lnrs-measures dataset. Because there are multiple species and benefits for each Measure, they are represented in the table as multiple items separated by line breaks. If this is not the best representation a new dataset could be created which contains unique combinations of measure_id, measure, species and benefit.

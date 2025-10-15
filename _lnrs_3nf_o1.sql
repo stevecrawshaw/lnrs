@@ -6,7 +6,7 @@
 
 rm data/lnrs_3nf_o1.duckdb
 -- #use local duckdb 1.3.2 for compatability with motherduck
-./duckdb data/lnrs_3nf_o1.duckdb -ui
+./duckdb
 
 ATTACH 'data/lnrs_3nf_o1.duckdb' AS lnrs;
 USE lnrs;
@@ -433,20 +433,19 @@ FROM measure_has_stakeholder;
 -- Each row in source_table links a specific 
 -- (measure_id, area_id, priority_id). We capture it here, ignoring duplicates:
 
--- measure_area_priority insert
-INSERT INTO measure_area_priority (measure_id, area_id, priority_id)
+INSERT INTO measure_area_priority (
+    measure_id,
+    area_id,
+    priority_id
+)
 SELECT DISTINCT
-    s.measure_id,
-    s.area_id,
-    s.priority_id
-FROM source_table s
--- Ensure all foreign keys exist in their parent tables
-JOIN measure m ON s.measure_id = m.measure_id
-JOIN area a ON s.area_id = a.area_id
-JOIN priority p ON s.priority_id = p.priority_id
-WHERE s.measure_id IS NOT NULL
-  AND s.area_id IS NOT NULL
-  AND s.priority_id IS NOT NULL;
+    measure_id,
+    area_id,
+    priority_id
+FROM source_table
+WHERE measure_id IS NOT NULL
+  AND area_id IS NOT NULL
+  AND priority_id IS NOT NULL;
 
 -- 6) Insert into measure_area_priority_grant (bridge for grants)
 -- Some measure–area–priority combos have an associated grant_id. Insert them here:
@@ -481,18 +480,15 @@ FROM read_csv('data/portal_upload/species-tbl.csv', delim = ';')
 WHERE species_id IS NOT NULL;
 
 -- 8) Insert into species_area_priority
-INSERT INTO species_area_priority (species_id, area_id, priority_id)
-SELECT 
-    s_a.species_id, 
-    s_a.area_id, 
-    s_p.priority_id
-FROM read_csv('data/portal_upload/species-area-tbl.csv', delim = ';') AS s_a
-JOIN read_csv('data/portal_upload/species-priority-tbl.csv', delim = ';') AS s_p 
-    ON s_a.species_id = s_p.species_id
--- Add JOINs to validate foreign keys
-JOIN species ON s_a.species_id = species.species_id
-JOIN area ON s_a.area_id = area.area_id
-JOIN priority ON s_p.priority_id = priority.priority_id;
+
+INSERT INTO species_area_priority
+BY NAME
+(SELECT species_id, area_id, priority_id
+FROM read_csv('data/portal_upload/species-area-tbl.csv', delim = ';')
+LEFT JOIN 
+(SELECT species_id, priority_id
+FROM read_csv('data/portal_upload/species-priority-tbl.csv', delim = ';'))
+USING (species_id));
 
 -- 9) Insert into area_geom
 
@@ -509,15 +505,18 @@ FROM read_parquet('data/lnrs-sub-areas.parquet');
 
 
 -- 10) Insert into area_funding_schemes
-INSERT INTO area_funding_schemes (id, area_id, area_name, local_funding_schemes)
+INSERT INTO area_funding_schemes (
+    id,
+    area_id,
+    area_name,
+    local_funding_schemes
+)
 SELECT 
-    lookup.id,
-    lookup.area_id,
-    lookup.area_name,
-    lookup.local_funding_schemes
-FROM read_csv('data/portal_upload/area-funding-schemes-tbl.csv', delim = ';') AS lookup
--- Add JOIN to validate the area_id
-JOIN area ON lookup.area_id = area.area_id;
+    id,
+    area_id,
+    area_name,
+    local_funding_schemes
+FROM read_csv('data/portal_upload/area-funding-schemes-tbl.csv', delim = ';');
 
 
 -- 11) Insert into benefits
@@ -531,22 +530,20 @@ SELECT DISTINCT
 FROM read_csv('data/portal_upload/benefits_tbl.csv', delim = ';');
 
 -- 12) Insert into measure_has_benefits (bridge)
-INSERT INTO measure_has_benefits (measure_id, benefit_id)
-SELECT 
-    lookup.measure_id, 
-    lookup.benefit_id
-FROM read_csv('data/portal_upload/measures_benefits_lookup_tbl.csv', delim = ';') AS lookup
--- Add JOIN to validate the measure_id
-JOIN measure ON lookup.measure_id = measure.measure_id;
+INSERT INTO measure_has_benefits (
+    measure_id,
+    benefit_id
+)
+SELECT measure_id, benefit_id
+FROM read_csv('data/portal_upload/measures_benefits_lookup_tbl.csv', delim = ';');
 
 -- 13) Insert into measure_has_species (bridge)
-INSERT INTO measure_has_species (measure_id, species_id)
-SELECT 
-    lookup.measure_id, 
-    lookup.species_id
-FROM read_csv('data/portal_upload/species_measures_lookup_tbl.csv', delim = ';') AS lookup
--- Add JOIN to validate the measure_id
-JOIN measure ON lookup.measure_id = measure.measure_id;
+INSERT INTO measure_has_species (
+    measure_id,
+    species_id
+)
+SELECT measure_id, species_id
+FROM read_csv('data/portal_upload/species_measures_lookup_tbl.csv', delim = ';');
 
 -- 14) Insert into habitat
 INSERT INTO habitat (
@@ -559,24 +556,20 @@ SELECT
 FROM read_csv('data/portal_upload/habitat-tbl.csv', delim = ';');
 
 -- 15) Insert into habitat_creation_area (bridge)
-INSERT INTO habitat_creation_area (area_id, habitat_id)
-SELECT 
-    lookup.area_id, 
-    lookup.habitat_id
-FROM read_csv('data/portal_upload/habitat-creation-area-lookup-tbl.csv', delim = ';') AS lookup
--- Add JOINs to validate both foreign keys
-JOIN area ON lookup.area_id = area.area_id
-JOIN habitat ON lookup.habitat_id = habitat.habitat_id;
+INSERT INTO habitat_creation_area (
+    area_id,
+    habitat_id
+)
+SELECT area_id, habitat_id
+FROM read_csv('data/portal_upload/habitat-creation-area-lookup-tbl.csv', delim = ';');
 
 -- 16) Insert into habitat_management_area (bridge)
-INSERT INTO habitat_management_area (area_id, habitat_id)
-SELECT 
-    lookup.area_id, 
-    lookup.habitat_id
-FROM read_csv('data/portal_upload/habitat-management-area-lookup-tbl.csv', delim = ';') AS lookup
--- Add JOINs to validate both foreign keys
-JOIN area ON lookup.area_id = area.area_id
-JOIN habitat ON lookup.habitat_id = habitat.habitat_id;
+INSERT INTO habitat_management_area (
+    area_id,
+    habitat_id
+)
+SELECT area_id, habitat_id
+FROM read_csv('data/portal_upload/habitat-management-area-lookup-tbl.csv', delim = ';');
 
 .tables
 -- export the schema to paste into ERD AI app eraser
@@ -697,13 +690,13 @@ FROM memory.glimpse(apmg_slim_vw);
 -- try JSON as CSV is outputting invalid encoding of non alphanumeric characters
 COPY apmg_slim_vw TO 'data/apmg_slim_ods.json' (ARRAY true);
 
-.schema
+
 -- EXPORT TO MOTHERDUCK
 
 ATTACH 'md:';
 DROP DATABASE lnrs_weca CASCADE;
 CREATE OR REPLACE DATABASE lnrs_weca FROM lnrs;
-DETACH lnrs_weca;
+
 
 -- Now we need a process to update (edit) the values in the individual tables
 -- and then update the source_table_recreated view
@@ -831,35 +824,11 @@ WHERE area_id = 1;
 
 .help
 
-------------------------------------------------------------------------
--- Checking constraint errors
------------------------------------------------------------------------
 
--- Check species_area_priority
-SELECT sap.area_id
-FROM species_area_priority sap
-LEFT JOIN area a ON sap.area_id = a.area_id
-WHERE a.area_id IS NULL;
+ATTACH 'md:';
 
+-- md authentication is in the .env variable
 
--- Check area_funding_schemes
-SELECT afs.area_id
-FROM area_funding_schemes afs
-LEFT JOIN area a ON afs.area_id = a.area_id
-WHERE a.area_id IS NULL;
-
-
--- Check habitat_creation_area
-SELECT hca.area_id
-FROM habitat_creation_area hca
-LEFT JOIN area a ON hca.area_id = a.area_id
-WHERE a.area_id IS NULL;
-
--- Check habitat_management_area
-SELECT hma.area_id
-FROM habitat_management_area hma
-LEFT JOIN area a ON hma.area_id = a.area_id
-WHERE a.area_id IS NULL;
-
+CREATE OR REPLACE DATABASE lnrs_weca FROM lnrs;
 
 .quit

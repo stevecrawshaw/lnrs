@@ -1,0 +1,85 @@
+{
+"title":"lnrs-measures",
+"type":"object",
+"oneOf":[
+{
+"$ref":"#/definitions/lnrs-measures"
+}
+],
+"definitions":{
+"lnrs-measures":{
+"properties":{
+"records":{
+"type":"array",
+"items":{
+"$ref":"#/definitions/lnrs-measures_records"
+}
+}
+}
+},
+"lnrs-measures_records":{
+"properties":{
+"fields":{
+"type":"object",
+"properties":{
+"measure":{
+"type":"string",
+"title":"Measure",
+"description":"A description of the measure that can be implemented to help nature recover."
+},
+"biodiversity_priority":{
+"type":"string",
+"title":"Biodiversity priority",
+"description":"The priority that the measure helps to deliver"
+},
+"core_supplementary":{
+"type":"string",
+"title":"Status",
+"description":"Is the measure core (essential) or supplementary?"
+},
+"mapped_unmapped":{
+"type":"string",
+"title":"Mapped status",
+"description":"Is the measure to be mapped or unmapped according to the guidance?"
+},
+"measure_type":{
+"type":"string",
+"title":"Measure type",
+"description":""
+},
+"stakeholder":{
+"type":"string",
+"title":"Stakeholder",
+"description":""
+},
+"link_to_further_guidance":{
+"type":"string",
+"title":"Further guidance",
+"description":""
+},
+"measure_id":{
+"type":"integer",
+"title":"Measure ID",
+"description":""
+},
+"priority_id":{
+"type":"integer",
+"title":"Priority ID",
+"description":""
+},
+"benefits":{
+"type":"string",
+"title":"Co - benefits",
+"description":"Additional benefits from implementing the measure"
+},
+"species":{
+"type":"string",
+"title":"Species",
+"description":"Species which benefit from implementing the measure"
+}
+}
+}
+}
+}
+}
+}
